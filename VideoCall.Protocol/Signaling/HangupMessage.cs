@@ -6,11 +6,11 @@ public sealed class HangupMessage : SignalingMessageBase
 {
     public override MessageType MessageType => MessageType.Hangup;
 
-    public uint CallId { get; set; }
+    public Guid CallId { get; set; }
 
     public HangupMessage() { }
 
-    public HangupMessage(uint callId)
+    public HangupMessage(Guid callId)
     {
         CallId = callId;
     }

@@ -9,4 +9,7 @@ public enum MessageType : byte
     Hangup = 5,
     KeepAlive = 6,
     MediaFrame = 8,
+    RegisterAck = 9,
+    CallRequestAck = 10,
+    IncomingCall = 11,
 }

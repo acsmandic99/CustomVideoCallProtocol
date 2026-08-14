@@ -28,11 +28,14 @@ public sealed class SignalingPacketHandler : IPacketHandler
 
         switch (message)
         {
-            case RegisterMessage m:
-                _listener.OnClientRegistered(m.UserId);
+            case RegisterAckMessage m:
+                _listener.OnRegisterAck(m);
                 break;
-            case CallRequestMessage m:
-                _listener.OnCallIncoming(m);
+            case CallRequestAckMessage m:
+                _listener.OnCallRequestAck(m);
+                break;
+            case IncomingCallMessage m:
+                _listener.OnIncomingCall(m);
                 break;
             case CallAcceptMessage m:
                 _listener.OnCallAccepted(m);
@@ -45,6 +48,9 @@ public sealed class SignalingPacketHandler : IPacketHandler
                 break;
             case KeepAliveMessage:
                 _listener.OnKeepAlive();
+                break;
+            case RegisterMessage:
+            case CallRequestMessage:
                 break;
             default:
                 return Next?.Handle(packet, message) ?? false;

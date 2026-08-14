@@ -4,9 +4,13 @@ namespace VideoCall.Network.Signaling;
 
 public interface ISignalingListener
 {
-    void OnClientRegistered(string userId);
+    void OnDisconnected();
 
-    void OnCallIncoming(CallRequestMessage message);
+    void OnRegisterAck(RegisterAckMessage message);
+
+    void OnCallRequestAck(CallRequestAckMessage message);
+
+    void OnIncomingCall(IncomingCallMessage message);
 
     void OnCallAccepted(CallAcceptMessage message);
 

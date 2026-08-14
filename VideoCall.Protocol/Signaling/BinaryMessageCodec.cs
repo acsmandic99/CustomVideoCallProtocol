@@ -18,7 +18,10 @@ public sealed class BinaryMessageCodec : IMessageCodec
         return message switch
         {
             RegisterMessage m => EncodeRegister(m),
+            RegisterAckMessage m => EncodeRegisterAck(m),
             CallRequestMessage m => EncodeCallRequest(m),
+            CallRequestAckMessage m => EncodeCallRequestAck(m),
+            IncomingCallMessage m => EncodeIncomingCall(m),
             CallAcceptMessage m => EncodeCallAccept(m),
             CallRejectMessage m => EncodeCallReject(m),
             HangupMessage m => EncodeHangup(m),
@@ -34,7 +37,10 @@ public sealed class BinaryMessageCodec : IMessageCodec
         return messageType switch
         {
             MessageType.Register => DecodeRegister((RegisterMessage)message, payload),
+            MessageType.RegisterAck => DecodeRegisterAck((RegisterAckMessage)message, payload),
             MessageType.CallRequest => DecodeCallRequest((CallRequestMessage)message, payload),
+            MessageType.CallRequestAck => DecodeCallRequestAck((CallRequestAckMessage)message, payload),
+            MessageType.IncomingCall => DecodeIncomingCall((IncomingCallMessage)message, payload),
             MessageType.CallAccept => DecodeCallAccept((CallAcceptMessage)message, payload),
             MessageType.CallReject => DecodeCallReject((CallRejectMessage)message, payload),
             MessageType.Hangup => DecodeHangup((HangupMessage)message, payload),
@@ -87,6 +93,32 @@ public sealed class BinaryMessageCodec : IMessageCodec
         return value;
     }
 
+    private static void WriteBool(Span<byte> buffer, ref int offset, bool value)
+    {
+        buffer[offset] = value ? (byte)1 : (byte)0;
+        offset += 1;
+    }
+
+    private static bool ReadBool(ReadOnlySpan<byte> buffer, ref int offset)
+    {
+        bool value = buffer[offset] != 0;
+        offset += 1;
+        return value;
+    }
+
+    private static void WriteGuid(Span<byte> buffer, ref int offset, Guid value)
+    {
+        value.TryWriteBytes(buffer.Slice(offset, 16));
+        offset += 16;
+    }
+
+    private static Guid ReadGuid(ReadOnlySpan<byte> buffer, ref int offset)
+    {
+        Guid value = new Guid(buffer.Slice(offset, 16));
+        offset += 16;
+        return value;
+    }
+
     private static int StringSize(string value)
     {
         return 2 + Encoding.UTF8.GetByteCount(value);
@@ -108,14 +140,32 @@ public sealed class BinaryMessageCodec : IMessageCodec
         return m;
     }
 
-    private static byte[] EncodeCallRequest(CallRequestMessage m)
+    private static byte[] EncodeRegisterAck(RegisterAckMessage m)
     {
-        int size = StringSize(m.CallerId) + StringSize(m.CalleeId) + 4 + StringSize(m.Ip) + 2;
+        int size = 1 + StringSize(m.UserId) + StringSize(m.Reason);
         var buffer = new byte[size];
         int offset = 0;
-        WriteString(buffer, ref offset, m.CallerId);
+        WriteBool(buffer, ref offset, m.Success);
+        WriteString(buffer, ref offset, m.UserId);
+        WriteString(buffer, ref offset, m.Reason);
+        return buffer;
+    }
+
+    private static RegisterAckMessage DecodeRegisterAck(RegisterAckMessage m, ReadOnlySpan<byte> payload)
+    {
+        int offset = 0;
+        m.Success = ReadBool(payload, ref offset);
+        m.UserId = ReadString(payload, ref offset);
+        m.Reason = ReadString(payload, ref offset);
+        return m;
+    }
+
+    private static byte[] EncodeCallRequest(CallRequestMessage m)
+    {
+        int size = StringSize(m.CalleeId) + StringSize(m.Ip) + 2;
+        var buffer = new byte[size];
+        int offset = 0;
         WriteString(buffer, ref offset, m.CalleeId);
-        WriteUInt32(buffer, ref offset, m.CallId);
         WriteString(buffer, ref offset, m.Ip);
         WriteUInt16(buffer, ref offset, m.Port);
         return buffer;
@@ -124,9 +174,47 @@ public sealed class BinaryMessageCodec : IMessageCodec
     private static CallRequestMessage DecodeCallRequest(CallRequestMessage m, ReadOnlySpan<byte> payload)
     {
         int offset = 0;
-        m.CallerId = ReadString(payload, ref offset);
         m.CalleeId = ReadString(payload, ref offset);
-        m.CallId = ReadUInt32(payload, ref offset);
+        m.Ip = ReadString(payload, ref offset);
+        m.Port = ReadUInt16(payload, ref offset);
+        return m;
+    }
+
+    private static byte[] EncodeCallRequestAck(CallRequestAckMessage m)
+    {
+        int size = 16 + StringSize(m.CalleeId);
+        var buffer = new byte[size];
+        int offset = 0;
+        WriteGuid(buffer, ref offset, m.CallId);
+        WriteString(buffer, ref offset, m.CalleeId);
+        return buffer;
+    }
+
+    private static CallRequestAckMessage DecodeCallRequestAck(CallRequestAckMessage m, ReadOnlySpan<byte> payload)
+    {
+        int offset = 0;
+        m.CallId = ReadGuid(payload, ref offset);
+        m.CalleeId = ReadString(payload, ref offset);
+        return m;
+    }
+
+    private static byte[] EncodeIncomingCall(IncomingCallMessage m)
+    {
+        int size = 16 + StringSize(m.CallerId) + StringSize(m.Ip) + 2;
+        var buffer = new byte[size];
+        int offset = 0;
+        WriteGuid(buffer, ref offset, m.CallId);
+        WriteString(buffer, ref offset, m.CallerId);
+        WriteString(buffer, ref offset, m.Ip);
+        WriteUInt16(buffer, ref offset, m.Port);
+        return buffer;
+    }
+
+    private static IncomingCallMessage DecodeIncomingCall(IncomingCallMessage m, ReadOnlySpan<byte> payload)
+    {
+        int offset = 0;
+        m.CallId = ReadGuid(payload, ref offset);
+        m.CallerId = ReadString(payload, ref offset);
         m.Ip = ReadString(payload, ref offset);
         m.Port = ReadUInt16(payload, ref offset);
         return m;
@@ -134,12 +222,10 @@ public sealed class BinaryMessageCodec : IMessageCodec
 
     private static byte[] EncodeCallAccept(CallAcceptMessage m)
     {
-        int size = StringSize(m.CallerId) + StringSize(m.CalleeId) + 4 + StringSize(m.Ip) + 2;
+        int size = 16 + StringSize(m.Ip) + 2;
         var buffer = new byte[size];
         int offset = 0;
-        WriteString(buffer, ref offset, m.CallerId);
-        WriteString(buffer, ref offset, m.CalleeId);
-        WriteUInt32(buffer, ref offset, m.CallId);
+        WriteGuid(buffer, ref offset, m.CallId);
         WriteString(buffer, ref offset, m.Ip);
         WriteUInt16(buffer, ref offset, m.Port);
         return buffer;
@@ -148,9 +234,7 @@ public sealed class BinaryMessageCodec : IMessageCodec
     private static CallAcceptMessage DecodeCallAccept(CallAcceptMessage m, ReadOnlySpan<byte> payload)
     {
         int offset = 0;
-        m.CallerId = ReadString(payload, ref offset);
-        m.CalleeId = ReadString(payload, ref offset);
-        m.CallId = ReadUInt32(payload, ref offset);
+        m.CallId = ReadGuid(payload, ref offset);
         m.Ip = ReadString(payload, ref offset);
         m.Port = ReadUInt16(payload, ref offset);
         return m;
@@ -158,12 +242,10 @@ public sealed class BinaryMessageCodec : IMessageCodec
 
     private static byte[] EncodeCallReject(CallRejectMessage m)
     {
-        int size = StringSize(m.CallerId) + StringSize(m.CalleeId) + 4 + StringSize(m.Reason);
+        int size = 16 + StringSize(m.Reason);
         var buffer = new byte[size];
         int offset = 0;
-        WriteString(buffer, ref offset, m.CallerId);
-        WriteString(buffer, ref offset, m.CalleeId);
-        WriteUInt32(buffer, ref offset, m.CallId);
+        WriteGuid(buffer, ref offset, m.CallId);
         WriteString(buffer, ref offset, m.Reason);
         return buffer;
     }
@@ -171,25 +253,23 @@ public sealed class BinaryMessageCodec : IMessageCodec
     private static CallRejectMessage DecodeCallReject(CallRejectMessage m, ReadOnlySpan<byte> payload)
     {
         int offset = 0;
-        m.CallerId = ReadString(payload, ref offset);
-        m.CalleeId = ReadString(payload, ref offset);
-        m.CallId = ReadUInt32(payload, ref offset);
+        m.CallId = ReadGuid(payload, ref offset);
         m.Reason = ReadString(payload, ref offset);
         return m;
     }
 
     private static byte[] EncodeHangup(HangupMessage m)
     {
-        var buffer = new byte[4];
+        var buffer = new byte[16];
         int offset = 0;
-        WriteUInt32(buffer, ref offset, m.CallId);
+        WriteGuid(buffer, ref offset, m.CallId);
         return buffer;
     }
 
     private static HangupMessage DecodeHangup(HangupMessage m, ReadOnlySpan<byte> payload)
     {
         int offset = 0;
-        m.CallId = ReadUInt32(payload, ref offset);
+        m.CallId = ReadGuid(payload, ref offset);
         return m;
     }
 }
