@@ -1,0 +1,55 @@
+using VideoCall.Network.Framing;
+using VideoCall.Protocol.Enums;
+using VideoCall.Protocol.Signaling;
+
+namespace VideoCall.Network.Signaling;
+
+public sealed class SignalingPacketHandler : IPacketHandler
+{
+    private readonly IMessageCodec _codec;
+    private readonly ISignalingListener _listener;
+
+    public IPacketHandler? Next { get; set; }
+
+    public SignalingPacketHandler(IMessageCodec codec, ISignalingListener listener)
+    {
+        _codec = codec;
+        _listener = listener;
+    }
+
+    public bool Handle(Packet packet, ISignalingMessage? decoded)
+    {
+        if (packet.MessageType == MessageType.MediaFrame)
+        {
+            return Next?.Handle(packet, decoded) ?? false;
+        }
+
+        var message = decoded ?? _codec.Decode(packet.MessageType, packet.Payload);
+
+        switch (message)
+        {
+            case RegisterMessage m:
+                _listener.OnClientRegistered(m.UserId);
+                break;
+            case CallRequestMessage m:
+                _listener.OnCallIncoming(m);
+                break;
+            case CallAcceptMessage m:
+                _listener.OnCallAccepted(m);
+                break;
+            case CallRejectMessage m:
+                _listener.OnCallRejected(m);
+                break;
+            case HangupMessage m:
+                _listener.OnCallHangup(m);
+                break;
+            case KeepAliveMessage:
+                _listener.OnKeepAlive();
+                break;
+            default:
+                return Next?.Handle(packet, message) ?? false;
+        }
+
+        return true;
+    }
+}

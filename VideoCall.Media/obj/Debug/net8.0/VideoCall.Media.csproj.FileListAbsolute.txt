@@ -1,0 +1,11 @@
+E:\Users\Documents\Diplomski\VideoCall\VideoCall.Media\bin\Debug\net8.0\VideoCall.Media.deps.json
+E:\Users\Documents\Diplomski\VideoCall\VideoCall.Media\bin\Debug\net8.0\VideoCall.Media.dll
+E:\Users\Documents\Diplomski\VideoCall\VideoCall.Media\bin\Debug\net8.0\VideoCall.Media.pdb
+E:\Users\Documents\Diplomski\VideoCall\VideoCall.Media\obj\Debug\net8.0\VideoCall.Media.GeneratedMSBuildEditorConfig.editorconfig
+E:\Users\Documents\Diplomski\VideoCall\VideoCall.Media\obj\Debug\net8.0\VideoCall.Media.AssemblyInfoInputs.cache
+E:\Users\Documents\Diplomski\VideoCall\VideoCall.Media\obj\Debug\net8.0\VideoCall.Media.AssemblyInfo.cs
+E:\Users\Documents\Diplomski\VideoCall\VideoCall.Media\obj\Debug\net8.0\VideoCall.Media.csproj.CoreCompileInputs.cache
+E:\Users\Documents\Diplomski\VideoCall\VideoCall.Media\obj\Debug\net8.0\VideoCall.Media.dll
+E:\Users\Documents\Diplomski\VideoCall\VideoCall.Media\obj\Debug\net8.0\refint\VideoCall.Media.dll
+E:\Users\Documents\Diplomski\VideoCall\VideoCall.Media\obj\Debug\net8.0\VideoCall.Media.pdb
+E:\Users\Documents\Diplomski\VideoCall\VideoCall.Media\obj\Debug\net8.0\ref\VideoCall.Media.dll

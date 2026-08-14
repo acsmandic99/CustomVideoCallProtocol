@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "dgSpecHash": "lOEEQAkUsKw=",
+  "success": true,
+  "projectFilePath": "E:\\Users\\Documents\\Diplomski\\VideoCall\\VideoCall.Network\\VideoCall.Network.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Milos\\.nuget\\packages\\microsoft.extensions.dependencyinjection.abstractions\\8.0.1\\microsoft.extensions.dependencyinjection.abstractions.8.0.1.nupkg.sha512",
+    "C:\\Users\\Milos\\.nuget\\packages\\microsoft.extensions.logging.abstractions\\8.0.1\\microsoft.extensions.logging.abstractions.8.0.1.nupkg.sha512",
+    "C:\\Users\\Milos\\.nuget\\packages\\microsoft.netcore.app.ref\\8.0.28\\microsoft.netcore.app.ref.8.0.28.nupkg.sha512",
+    "C:\\Users\\Milos\\.nuget\\packages\\microsoft.windowsdesktop.app.ref\\8.0.28\\microsoft.windowsdesktop.app.ref.8.0.28.nupkg.sha512",
+    "C:\\Users\\Milos\\.nuget\\packages\\microsoft.aspnetcore.app.ref\\8.0.28\\microsoft.aspnetcore.app.ref.8.0.28.nupkg.sha512"
+  ],
+  "logs": []
+}
