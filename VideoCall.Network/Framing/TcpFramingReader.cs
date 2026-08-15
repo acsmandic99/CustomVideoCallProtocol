@@ -1,4 +1,5 @@
 using VideoCall.Protocol.Enums;
+using VideoCall.Protocol.Framing;
 
 namespace VideoCall.Network.Framing;
 

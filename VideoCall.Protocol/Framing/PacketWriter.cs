@@ -1,7 +1,7 @@
 using System.Buffers.Binary;
 using VideoCall.Protocol.Enums;
 
-namespace VideoCall.Network.Framing;
+namespace VideoCall.Protocol.Framing;
 
 public static class PacketWriter
 {

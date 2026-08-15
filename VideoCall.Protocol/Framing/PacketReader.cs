@@ -1,7 +1,7 @@
 using System.Buffers.Binary;
 using VideoCall.Protocol.Enums;
 
-namespace VideoCall.Network.Framing;
+namespace VideoCall.Protocol.Framing;
 
 public static class PacketReader
 {
@@ -31,30 +31,20 @@ public static class PacketReader
             return false;
         }
 
+        var payload = new byte[payloadLength];
         if (payloadLength > 0)
         {
-            var payload = new byte[payloadLength];
             buffer.Slice(Packet.HeaderSize, (int)payloadLength).CopyTo(payload);
-            packet = new Packet
-            {
-                Version = version,
-                MessageType = messageType,
-                FrameType = frameType,
-                Sequence = sequence,
-                Payload = payload,
-            };
         }
-        else
+
+        packet = new Packet
         {
-            packet = new Packet
-            {
-                Version = version,
-                MessageType = messageType,
-                FrameType = frameType,
-                Sequence = sequence,
-                Payload = Array.Empty<byte>(),
-            };
-        }
+            Version = version,
+            MessageType = messageType,
+            FrameType = frameType,
+            Sequence = sequence,
+            Payload = payload,
+        };
 
         return true;
     }

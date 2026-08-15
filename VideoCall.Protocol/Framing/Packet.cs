@@ -1,6 +1,6 @@
 using VideoCall.Protocol.Enums;
 
-namespace VideoCall.Network.Framing;
+namespace VideoCall.Protocol.Framing;
 
 public sealed class Packet
 {

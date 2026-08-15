@@ -2,6 +2,7 @@ using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
 using VideoCall.Network.Framing;
 using VideoCall.Protocol.Enums;
+using VideoCall.Protocol.Framing;
 using VideoCall.Protocol.Signaling;
 
 namespace VideoCall.Network.Signaling;

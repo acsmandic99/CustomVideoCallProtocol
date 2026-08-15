@@ -12,4 +12,5 @@ public enum MessageType : byte
     RegisterAck = 9,
     CallRequestAck = 10,
     IncomingCall = 11,
+    KeyframeRequest = 12,
 }
