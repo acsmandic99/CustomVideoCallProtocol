@@ -1,6 +1,8 @@
 using System.Runtime.InteropServices;
 using OpenCvSharp;
 using Sdcb.FFmpeg.Codecs;
+using Sdcb.FFmpeg.Common;
+using Sdcb.FFmpeg.Raw;
 using Sdcb.FFmpeg.Utils;
 using VideoCall.Protocol.Enums;
 
@@ -40,7 +42,7 @@ public sealed class H264VideoDecoder : IVideoDecoder
             handle.Free();
         }
 
-        if (!_context.ReceiveFrame(_frame))
+        if (_context.ReceiveFrame(_frame) != CodecResult.Success)
         {
             return null;
         }
@@ -55,8 +57,8 @@ public sealed class H264VideoDecoder : IVideoDecoder
             long uSize = ySize / 4;
 
             CopyPlane(_frame.Data[0], _frame.Linesize[0], i420.Data, width, height, width);
-            CopyPlane(_frame.Data[1], _frame.Linesize[1], i420.Data + ySize, width / 2, height / 2, width / 2);
-            CopyPlane(_frame.Data[2], _frame.Linesize[2], i420.Data + ySize + uSize, width / 2, height / 2, width / 2);
+            CopyPlane(_frame.Data[1], _frame.Linesize[1], (nint)(i420.Data + ySize), width / 2, height / 2, width / 2);
+            CopyPlane(_frame.Data[2], _frame.Linesize[2], (nint)(i420.Data + ySize + uSize), width / 2, height / 2, width / 2);
 
             using var bgr = new Mat();
             Cv2.CvtColor(i420, bgr, ColorConversionCodes.YUV2BGR_I420);

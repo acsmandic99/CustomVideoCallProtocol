@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using OpenCvSharp;
 using Sdcb.FFmpeg.Codecs;
 using Sdcb.FFmpeg.Common;
+using Sdcb.FFmpeg.Raw;
 using Sdcb.FFmpeg.Utils;
 using VideoCall.Protocol.Enums;
 
@@ -78,8 +79,8 @@ public sealed class H264VideoEncoder : IVideoEncoder
         IntPtr basePtr = _i420.Data;
 
         _frame.Data[0] = basePtr;
-        _frame.Data[1] = basePtr + ySize;
-        _frame.Data[2] = basePtr + ySize + uSize;
+        _frame.Data[1] = (nint)(basePtr + ySize);
+        _frame.Data[2] = (nint)(basePtr + ySize + uSize);
         _frame.Linesize[0] = _width;
         _frame.Linesize[1] = _width / 2;
         _frame.Linesize[2] = _width / 2;
@@ -96,12 +97,13 @@ public sealed class H264VideoEncoder : IVideoEncoder
         using var output = new MemoryStream();
         bool keyframe = false;
 
-        while (_context.ReceivePacket(_packet))
+        while (_context.ReceivePacket(_packet) == CodecResult.Success)
         {
             keyframe |= (_packet.Flags & KeyPacketFlag) != 0;
 
-            var buffer = new byte[_packet.Size];
-            Marshal.Copy(_packet.Data, buffer, 0, _packet.Size);
+            int size = _packet.Data.Length;
+            var buffer = new byte[size];
+            Marshal.Copy(_packet.Data.Pointer, buffer, 0, size);
             output.Write(buffer, 0, buffer.Length);
 
             _packet.Unref();

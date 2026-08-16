@@ -6,6 +6,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using VideoCall.Codecs;
+using VideoCall.Codecs.FFmpeg;
 using VideoCall.Codecs.OpenCv;
 using VideoCall.Media;
 using VideoCall.Media.Testing;
@@ -208,7 +209,7 @@ public partial class MainWindow : Window, ISignalingListener
     {
         _videoCodec = CodecCombo.SelectedIndex == 1 ? VideoCodec.Jpeg : VideoCodec.H264;
         _encoder = _videoCodec == VideoCodec.H264
-            ? new FFmpeg.H264VideoEncoder(640, 480, 30)
+            ? new H264VideoEncoder(640, 480, 30)
             : new JpegVideoEncoder();
 
         _lossyTransport = new LossyTransportDecorator(new UdpMediaTransport(), _selectedDropPercent);
@@ -425,7 +426,7 @@ public partial class MainWindow : Window, ISignalingListener
         public void OnFrameReceived(ReadOnlyMemory<byte> data, FrameType frameType, uint sequence, VideoCodec videoCodec)
         {
             IVideoDecoder decoder = videoCodec == VideoCodec.H264
-                ? (_owner._h264Decoder ??= new FFmpeg.H264VideoDecoder())
+                ? (_owner._h264Decoder ??= new H264VideoDecoder())
                 : _owner._jpegDecoder;
 
             VideoFrame? frame = decoder.Decode(data.ToArray(), frameType);
