@@ -4,5 +4,5 @@ namespace VideoCall.Media;
 
 public interface IFrameSink
 {
-    void OnFrameReceived(ReadOnlyMemory<byte> data, FrameType frameType, uint sequence);
+    void OnFrameReceived(ReadOnlyMemory<byte> data, FrameType frameType, uint sequence, VideoCodec videoCodec);
 }

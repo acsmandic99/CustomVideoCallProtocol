@@ -19,6 +19,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoCall.Client.Console", 
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoCall.Media.Test.Console", "VideoCall.Media.Test.Console\VideoCall.Media.Test.Console.csproj", "{364DBED3-B661-41C1-BD8F-6E39F2D324BA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoCall.Codecs", "VideoCall.Codecs\VideoCall.Codecs.csproj", "{2128CA28-20E9-4263-BB7D-3D07732AA591}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -125,6 +127,18 @@ Global
 		{364DBED3-B661-41C1-BD8F-6E39F2D324BA}.Release|x64.Build.0 = Release|Any CPU
 		{364DBED3-B661-41C1-BD8F-6E39F2D324BA}.Release|x86.ActiveCfg = Release|Any CPU
 		{364DBED3-B661-41C1-BD8F-6E39F2D324BA}.Release|x86.Build.0 = Release|Any CPU
+		{2128CA28-20E9-4263-BB7D-3D07732AA591}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2128CA28-20E9-4263-BB7D-3D07732AA591}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2128CA28-20E9-4263-BB7D-3D07732AA591}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{2128CA28-20E9-4263-BB7D-3D07732AA591}.Debug|x64.Build.0 = Debug|Any CPU
+		{2128CA28-20E9-4263-BB7D-3D07732AA591}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{2128CA28-20E9-4263-BB7D-3D07732AA591}.Debug|x86.Build.0 = Debug|Any CPU
+		{2128CA28-20E9-4263-BB7D-3D07732AA591}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2128CA28-20E9-4263-BB7D-3D07732AA591}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2128CA28-20E9-4263-BB7D-3D07732AA591}.Release|x64.ActiveCfg = Release|Any CPU
+		{2128CA28-20E9-4263-BB7D-3D07732AA591}.Release|x64.Build.0 = Release|Any CPU
+		{2128CA28-20E9-4263-BB7D-3D07732AA591}.Release|x86.ActiveCfg = Release|Any CPU
+		{2128CA28-20E9-4263-BB7D-3D07732AA591}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

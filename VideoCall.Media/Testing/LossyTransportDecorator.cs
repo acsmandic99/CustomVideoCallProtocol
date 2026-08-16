@@ -1,15 +1,15 @@
 using System.Net;
 using VideoCall.Media.Transport;
-using VideoCall.Protocol.Enums;
 using VideoCall.Protocol.Framing;
 
-namespace VideoCall.Media.Test.Console;
+namespace VideoCall.Media.Testing;
 
 public sealed class LossyTransportDecorator : IUdpMediaTransport
 {
     private readonly IUdpMediaTransport _inner;
     private readonly Random _random;
-    private readonly int _dropPercent;
+    private readonly object _randomLock = new();
+    private int _dropPercent;
     private readonly Func<Packet, bool>? _dropPredicate;
 
     public event DatagramReceivedHandler? DatagramReceived
@@ -18,9 +18,15 @@ public sealed class LossyTransportDecorator : IUdpMediaTransport
         remove => _inner.DatagramReceived -= value;
     }
 
+    public int DropPercent
+    {
+        get => _dropPercent;
+        set => _dropPercent = Math.Clamp(value, 0, 100);
+    }
+
     public int DroppedCount { get; private set; }
 
-    public LossyTransportDecorator(IUdpMediaTransport inner, int dropPercent, int seed = 42, Func<Packet, bool>? dropPredicate = null)
+    public LossyTransportDecorator(IUdpMediaTransport inner, int dropPercent = 0, int seed = 42, Func<Packet, bool>? dropPredicate = null)
     {
         _inner = inner;
         _dropPercent = dropPercent;
@@ -35,7 +41,12 @@ public sealed class LossyTransportDecorator : IUdpMediaTransport
 
     public async Task SendToAsync(ReadOnlyMemory<byte> data, IPEndPoint remote)
     {
-        bool drop = _random.Next(100) < _dropPercent;
+        bool drop;
+
+        lock (_randomLock)
+        {
+            drop = _random.Next(100) < _dropPercent;
+        }
 
         if (!drop && _dropPredicate is not null && PacketReader.TryParse(data.Span, out Packet? packet) && packet is not null)
         {

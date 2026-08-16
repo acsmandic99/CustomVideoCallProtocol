@@ -18,7 +18,7 @@ public sealed class CountingFrameSink : IFrameSink
         _verbose = verbose;
     }
 
-    public void OnFrameReceived(ReadOnlyMemory<byte> data, FrameType frameType, uint sequence)
+    public void OnFrameReceived(ReadOnlyMemory<byte> data, FrameType frameType, uint sequence, VideoCodec videoCodec)
     {
         lock (_lock)
         {
@@ -30,7 +30,7 @@ public sealed class CountingFrameSink : IFrameSink
 
             if (_verbose)
             {
-                System.Console.WriteLine($"  [{_name}] <- frame seq={sequence} type={frameType} bytes={data.Length}");
+                System.Console.WriteLine($"  [{_name}] <- frame seq={sequence} type={frameType} codec={videoCodec} bytes={data.Length}");
             }
         }
     }
@@ -38,7 +38,7 @@ public sealed class CountingFrameSink : IFrameSink
 
 public sealed class NullFrameSink : IFrameSink
 {
-    public void OnFrameReceived(ReadOnlyMemory<byte> data, FrameType frameType, uint sequence)
+    public void OnFrameReceived(ReadOnlyMemory<byte> data, FrameType frameType, uint sequence, VideoCodec videoCodec)
     {
     }
 }

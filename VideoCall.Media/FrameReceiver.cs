@@ -15,15 +15,17 @@ public sealed class FrameReceiver
     private sealed class PendingFrame
     {
         public FrameType FrameType { get; }
+        public VideoCodec VideoCodec { get; }
         public int FragmentCount { get; }
         public byte[][] Fragments { get; }
         public bool[] Received { get; }
         public int ReceivedCount { get; set; }
         public long FirstSeenTicks { get; } = Stopwatch.GetTimestamp();
 
-        public PendingFrame(FrameType frameType, int fragmentCount)
+        public PendingFrame(FrameType frameType, VideoCodec videoCodec, int fragmentCount)
         {
             FrameType = frameType;
+            VideoCodec = videoCodec;
             FragmentCount = fragmentCount;
             Fragments = new byte[fragmentCount][];
             Received = new bool[fragmentCount];
@@ -52,13 +54,14 @@ public sealed class FrameReceiver
 
     public void HandleMediaFrame(Packet packet)
     {
-        if (packet.Payload.Length < 4)
+        if (packet.Payload.Length < 5)
         {
             return;
         }
 
-        ushort fragmentIndex = BinaryPrimitives.ReadUInt16BigEndian(packet.Payload.AsSpan(0, 2));
-        ushort fragmentCount = BinaryPrimitives.ReadUInt16BigEndian(packet.Payload.AsSpan(2, 2));
+        var videoCodec = (VideoCodec)packet.Payload[0];
+        ushort fragmentIndex = BinaryPrimitives.ReadUInt16BigEndian(packet.Payload.AsSpan(1, 2));
+        ushort fragmentCount = BinaryPrimitives.ReadUInt16BigEndian(packet.Payload.AsSpan(3, 2));
 
         if (fragmentIndex >= fragmentCount)
         {
@@ -80,7 +83,7 @@ public sealed class FrameReceiver
 
         if (!_pending.TryGetValue(sequence, out PendingFrame? pending))
         {
-            pending = new PendingFrame(packet.FrameType, fragmentCount);
+            pending = new PendingFrame(packet.FrameType, videoCodec, fragmentCount);
             _pending[sequence] = pending;
         }
 
@@ -89,8 +92,8 @@ public sealed class FrameReceiver
             return;
         }
 
-        var fragment = new byte[packet.Payload.Length - 4];
-        packet.Payload.AsSpan(4).CopyTo(fragment);
+        var fragment = new byte[packet.Payload.Length - 5];
+        packet.Payload.AsSpan(5).CopyTo(fragment);
         pending.Fragments[fragmentIndex] = fragment;
         pending.Received[fragmentIndex] = true;
         pending.ReceivedCount++;
@@ -126,7 +129,7 @@ public sealed class FrameReceiver
         }
 
         _pending.Remove(sequence);
-        _sink.OnFrameReceived(data, pending.FrameType, sequence);
+        _sink.OnFrameReceived(data, pending.FrameType, sequence, pending.VideoCodec);
     }
 
     private void DiscardOutdated(uint completedSequence)

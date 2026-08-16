@@ -32,9 +32,9 @@ public sealed class MediaSession : IDisposable
         _transport.Bind(localPort);
     }
 
-    public void SendFrame(byte[] data, FrameType frameType)
+    public void SendFrame(byte[] data, FrameType frameType, VideoCodec videoCodec)
     {
-        _sender.SendFrame(data, frameType);
+        _sender.SendFrame(data, frameType, videoCodec);
     }
 
     private void OnDatagramReceived(ReadOnlyMemory<byte> data, IPEndPoint from)

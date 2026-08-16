@@ -1,6 +1,7 @@
 using System.Net;
 using VideoCall.Media;
 using VideoCall.Media.Test.Console;
+using VideoCall.Media.Testing;
 using VideoCall.Media.Transport;
 using VideoCall.Protocol.Enums;
 using VideoCall.Protocol.Framing;
@@ -90,7 +91,7 @@ public static class Program
                 System.Console.WriteLine($"  [ALICE] -> frame #{i + 1} type={frameType}{(forced ? " (forced)" : "")}");
             }
 
-            alice.SendFrame(data, frameType);
+            alice.SendFrame(data, frameType, VideoCodec.Jpeg);
             await Task.Delay(5);
         }
 

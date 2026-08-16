@@ -9,7 +9,7 @@ namespace VideoCall.Media;
 
 public sealed class FrameSender : IDisposable
 {
-    private sealed record OutgoingFrame(byte[] Data, FrameType FrameType);
+    private sealed record OutgoingFrame(byte[] Data, FrameType FrameType, VideoCodec VideoCodec);
 
     private readonly IUdpMediaTransport _transport;
     private readonly IPEndPoint _remote;
@@ -31,9 +31,9 @@ public sealed class FrameSender : IDisposable
         _worker = Task.Run(SendLoopAsync);
     }
 
-    public void SendFrame(byte[] data, FrameType frameType)
+    public void SendFrame(byte[] data, FrameType frameType, VideoCodec videoCodec)
     {
-        _queue.Writer.TryWrite(new OutgoingFrame(data, frameType));
+        _queue.Writer.TryWrite(new OutgoingFrame(data, frameType, videoCodec));
     }
 
     public void HandleKeyframeRequest()
@@ -47,7 +47,7 @@ public sealed class FrameSender : IDisposable
         {
             try
             {
-                await SendFragmentsAsync(frame.Data, frame.FrameType);
+                await SendFragmentsAsync(frame.Data, frame.FrameType, frame.VideoCodec);
             }
             catch (Exception)
             {
@@ -56,7 +56,7 @@ public sealed class FrameSender : IDisposable
         }
     }
 
-    private async Task SendFragmentsAsync(byte[] data, FrameType frameType)
+    private async Task SendFragmentsAsync(byte[] data, FrameType frameType, VideoCodec videoCodec)
     {
         uint sequence = ++_nextSequence;
         int fragmentCount = (data.Length + MediaConstants.FragmentSize - 1) / MediaConstants.FragmentSize;
@@ -66,10 +66,11 @@ public sealed class FrameSender : IDisposable
             int offset = fragmentIndex * MediaConstants.FragmentSize;
             int length = Math.Min(MediaConstants.FragmentSize, data.Length - offset);
 
-            var payload = new byte[4 + length];
-            BinaryPrimitives.WriteUInt16BigEndian(payload.AsSpan(0, 2), fragmentIndex);
-            BinaryPrimitives.WriteUInt16BigEndian(payload.AsSpan(2, 2), (ushort)fragmentCount);
-            Buffer.BlockCopy(data, offset, payload, 4, length);
+            var payload = new byte[5 + length];
+            payload[0] = (byte)videoCodec;
+            BinaryPrimitives.WriteUInt16BigEndian(payload.AsSpan(1, 2), fragmentIndex);
+            BinaryPrimitives.WriteUInt16BigEndian(payload.AsSpan(3, 2), (ushort)fragmentCount);
+            Buffer.BlockCopy(data, offset, payload, 5, length);
 
             var packet = new Packet(MessageType.MediaFrame, payload, sequence, frameType);
             byte[] bytes = PacketWriter.Serialize(packet);
