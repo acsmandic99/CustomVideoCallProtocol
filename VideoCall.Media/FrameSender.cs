@@ -9,15 +9,22 @@ namespace VideoCall.Media;
 
 public sealed class FrameSender : IDisposable
 {
+    private const int RetransmitBufferSize = 256;
+
     private sealed record OutgoingFrame(byte[] Data, FrameType FrameType, VideoCodec VideoCodec);
 
     private readonly IUdpMediaTransport _transport;
     private readonly IPEndPoint _remote;
     private readonly Channel<OutgoingFrame> _queue;
     private readonly Task _worker;
+    private readonly object _recentLock = new();
+    private readonly Dictionary<uint, (byte[] Data, FrameType FrameType, VideoCodec Codec)> _recent = new();
+    private readonly Queue<uint> _recentOrder = new();
     private uint _nextSequence;
 
     public event Action? KeyframeRequested;
+
+    public int RetransmittedFrames { get; private set; }
 
     public FrameSender(IUdpMediaTransport transport, IPEndPoint remote)
     {
@@ -36,9 +43,42 @@ public sealed class FrameSender : IDisposable
         _queue.Writer.TryWrite(new OutgoingFrame(data, frameType, videoCodec));
     }
 
-    public void HandleKeyframeRequest()
+    public void HandleKeyframeRequest(uint[] missingSequences)
     {
-        KeyframeRequested?.Invoke();
+        bool needKeyframe = false;
+
+        foreach (uint missingSequence in missingSequences)
+        {
+            (byte[] Data, FrameType FrameType, VideoCodec Codec) frame;
+
+            lock (_recentLock)
+            {
+                if (missingSequence == 0 || !_recent.TryGetValue(missingSequence, out frame) || frame.FrameType != FrameType.Delta)
+                {
+                    needKeyframe = true;
+                    continue;
+                }
+            }
+
+            RetransmittedFrames++;
+            _ = RetransmitAsync(frame, missingSequence);
+        }
+
+        if (needKeyframe || missingSequences.Length == 0)
+        {
+            KeyframeRequested?.Invoke();
+        }
+    }
+
+    private async Task RetransmitAsync((byte[] Data, FrameType FrameType, VideoCodec Codec) frame, uint sequence)
+    {
+        try
+        {
+            await SendFragmentsAsync(frame.Data, frame.FrameType, frame.Codec, sequence);
+        }
+        catch (Exception)
+        {
+        }
     }
 
     private async Task SendLoopAsync()
@@ -47,7 +87,7 @@ public sealed class FrameSender : IDisposable
         {
             try
             {
-                await SendFragmentsAsync(frame.Data, frame.FrameType, frame.VideoCodec);
+                await SendFragmentsAsync(frame.Data, frame.FrameType, frame.VideoCodec, null);
             }
             catch (Exception)
             {
@@ -56,9 +96,24 @@ public sealed class FrameSender : IDisposable
         }
     }
 
-    private async Task SendFragmentsAsync(byte[] data, FrameType frameType, VideoCodec videoCodec)
+    private async Task SendFragmentsAsync(byte[] data, FrameType frameType, VideoCodec videoCodec, uint? retransmitSequence)
     {
-        uint sequence = ++_nextSequence;
+        uint sequence = retransmitSequence ?? ++_nextSequence;
+
+        if (retransmitSequence is null)
+        {
+            lock (_recentLock)
+            {
+                _recent[sequence] = (data, frameType, videoCodec);
+                _recentOrder.Enqueue(sequence);
+
+                while (_recentOrder.Count > RetransmitBufferSize)
+                {
+                    _recent.Remove(_recentOrder.Dequeue(), out _);
+                }
+            }
+        }
+
         int fragmentCount = (data.Length + MediaConstants.FragmentSize - 1) / MediaConstants.FragmentSize;
 
         for (ushort fragmentIndex = 0; fragmentIndex < fragmentCount; fragmentIndex++)

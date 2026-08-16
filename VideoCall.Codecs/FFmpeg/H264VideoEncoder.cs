@@ -10,8 +10,8 @@ namespace VideoCall.Codecs.FFmpeg;
 
 public sealed class H264VideoEncoder : IVideoEncoder
 {
-    private const int GopSize = 60;
-    private const int Bitrate = 1_500_000;
+    private const int GopSize = 15;
+    private const int Bitrate = 600_000;
     private const int KeyPacketFlag = 0x1;
 
     private readonly CodecContext _context;

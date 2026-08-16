@@ -30,7 +30,7 @@ public static class Program
             bobPort: 7003,
             dropPercent: 10,
             dropPredicate: null,
-            verbose: false);
+            verbose: true);
 
         await RunScenario(
             name: "Scenario 3: targeted keyframe drop (seq=17)",
@@ -92,7 +92,7 @@ public static class Program
             }
 
             alice.SendFrame(data, frameType, VideoCodec.Jpeg);
-            await Task.Delay(5);
+            await Task.Delay(33);
         }
 
         await Task.Delay(1500);

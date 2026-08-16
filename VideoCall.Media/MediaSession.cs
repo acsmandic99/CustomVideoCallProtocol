@@ -50,7 +50,18 @@ public sealed class MediaSession : IDisposable
                 _receiver.HandleMediaFrame(packet);
                 break;
             case MessageType.KeyframeRequest:
-                _sender.HandleKeyframeRequest();
+                if (packet.Payload.Length >= 1)
+                {
+                    int count = packet.Payload[0];
+                    var sequences = new uint[count];
+
+                    for (int i = 0; i < count && 1 + (i + 1) * 4 <= packet.Payload.Length; i++)
+                    {
+                        sequences[i] = System.Buffers.Binary.BinaryPrimitives.ReadUInt32BigEndian(packet.Payload.AsSpan(1 + i * 4, 4));
+                    }
+
+                    _sender.HandleKeyframeRequest(sequences);
+                }
                 break;
         }
     }

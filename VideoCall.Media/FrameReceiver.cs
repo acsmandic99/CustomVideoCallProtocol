@@ -9,8 +9,9 @@ namespace VideoCall.Media;
 
 public sealed class FrameReceiver
 {
-    private static readonly TimeSpan KeyframeRequestInterval = TimeSpan.FromMilliseconds(200);
-    private static readonly TimeSpan PendingExpiry = TimeSpan.FromMilliseconds(500);
+    private static readonly TimeSpan RequestInterval = TimeSpan.FromMilliseconds(50);
+    private static readonly TimeSpan HoleTimeout = TimeSpan.FromMilliseconds(400);
+    private const int MaxHolesPerRequest = 16;
 
     private sealed class PendingFrame
     {
@@ -32,18 +33,36 @@ public sealed class FrameReceiver
         }
     }
 
+    private sealed class CompletedFrame
+    {
+        public byte[] Data { get; }
+        public FrameType FrameType { get; }
+        public VideoCodec VideoCodec { get; }
+        public long FirstSeenTicks { get; } = Stopwatch.GetTimestamp();
+
+        public CompletedFrame(byte[] data, FrameType frameType, VideoCodec videoCodec)
+        {
+            Data = data;
+            FrameType = frameType;
+            VideoCodec = videoCodec;
+        }
+    }
+
     private readonly IUdpMediaTransport _transport;
     private readonly IPEndPoint _remote;
     private readonly IFrameSink _sink;
 
     private readonly Dictionary<uint, PendingFrame> _pending = new();
-    private uint _highestStartedSequence;
-    private bool _seenAnyFrame;
-    private bool _chainBroken;
+    private readonly Dictionary<uint, CompletedFrame> _hold = new();
+    private uint _lastDelivered;
+    private bool _deliveredAny;
+    private bool _awaitingKeyframe;
+    private uint _highestSeen;
     private long _lastRequestTicks;
-    private int _keyframeRequestCount;
+    private long _lastProgressTicks = Stopwatch.GetTimestamp();
 
-    public int KeyframeRequestCount => _keyframeRequestCount;
+    public int KeyframeRequestCount { get; private set; }
+    public int NackCount { get; private set; }
 
     public FrameReceiver(IUdpMediaTransport transport, IPEndPoint remote, IFrameSink sink)
     {
@@ -70,16 +89,17 @@ public sealed class FrameReceiver
 
         uint sequence = packet.Sequence;
 
-        if (_seenAnyFrame && sequence > _highestStartedSequence + 1)
+        if (_deliveredAny && sequence <= _lastDelivered)
         {
-            _chainBroken = true;
+            return;
         }
 
-        if (!_seenAnyFrame || sequence > _highestStartedSequence)
+        if (sequence > _highestSeen)
         {
-            _highestStartedSequence = sequence;
-            _seenAnyFrame = true;
+            _highestSeen = sequence;
         }
+
+        ExpireStale();
 
         if (!_pending.TryGetValue(sequence, out PendingFrame? pending))
         {
@@ -100,68 +120,135 @@ public sealed class FrameReceiver
 
         if (pending.ReceivedCount == pending.FragmentCount)
         {
-            CompleteFrame(sequence, pending);
-        }
-    }
+            int totalLength = pending.Fragments.Sum(f => f.Length);
+            var data = new byte[totalLength];
+            int offset = 0;
 
-    private void CompleteFrame(uint sequence, PendingFrame pending)
-    {
-        ExpirePending();
-        DiscardOutdated(sequence);
-
-        if (_chainBroken && pending.FrameType == FrameType.Delta)
-        {
-            SendKeyframeRequest();
-        }
-
-        if (pending.FrameType == FrameType.Keyframe)
-        {
-            _chainBroken = false;
-        }
-
-        int totalLength = pending.Fragments.Sum(f => f.Length);
-        var data = new byte[totalLength];
-        int offset = 0;
-        foreach (byte[] fragment in pending.Fragments)
-        {
-            Buffer.BlockCopy(fragment, 0, data, offset, fragment.Length);
-            offset += fragment.Length;
-        }
-
-        _pending.Remove(sequence);
-        _sink.OnFrameReceived(data, pending.FrameType, sequence, pending.VideoCodec);
-    }
-
-    private void DiscardOutdated(uint completedSequence)
-    {
-        List<uint>? outdated = null;
-
-        foreach (KeyValuePair<uint, PendingFrame> pair in _pending)
-        {
-            if (pair.Key < completedSequence && pair.Value.ReceivedCount < pair.Value.FragmentCount)
+            foreach (byte[] part in pending.Fragments)
             {
-                (outdated ??= new List<uint>()).Add(pair.Key);
+                Buffer.BlockCopy(part, 0, data, offset, part.Length);
+                offset += part.Length;
+            }
+
+            _pending.Remove(sequence);
+            _hold[sequence] = new CompletedFrame(data, pending.FrameType, pending.VideoCodec);
+        }
+
+        DeliverInOrder();
+        RequestMissing();
+    }
+
+    private void DeliverInOrder()
+    {
+        if (!_deliveredAny)
+        {
+            uint? firstSeq = null;
+
+            foreach (uint seq in _hold.Keys)
+            {
+                if (firstSeq is null || seq < firstSeq)
+                {
+                    firstSeq = seq;
+                }
+            }
+
+            if (firstSeq is null)
+            {
+                return;
+            }
+
+            if (_awaitingKeyframe && _hold[firstSeq.Value].FrameType != FrameType.Keyframe)
+            {
+                return;
+            }
+
+            Deliver(firstSeq.Value);
+        }
+
+        if (_awaitingKeyframe)
+        {
+            uint? keySeq = null;
+
+            foreach (KeyValuePair<uint, CompletedFrame> pair in _hold)
+            {
+                if (pair.Value.FrameType == FrameType.Keyframe && (keySeq is null || pair.Key < keySeq))
+                {
+                    keySeq = pair.Key;
+                }
+            }
+
+            if (keySeq is null)
+            {
+                return;
+            }
+
+            List<uint> stale = _hold.Keys.Where(s => s < keySeq.Value).ToList();
+            foreach (uint seq in stale)
+            {
+                _hold.Remove(seq);
+            }
+
+            _awaitingKeyframe = false;
+            Deliver(keySeq.Value);
+        }
+
+        while (_hold.Remove(_lastDelivered + 1, out CompletedFrame? frame))
+        {
+            DeliverFrame(frame, _lastDelivered + 1);
+            _lastDelivered++;
+            _lastProgressTicks = Stopwatch.GetTimestamp();
+        }
+    }
+
+    private void Deliver(uint sequence)
+    {
+        if (_hold.Remove(sequence, out CompletedFrame? frame))
+        {
+            _lastDelivered = sequence;
+            _deliveredAny = true;
+            _lastProgressTicks = Stopwatch.GetTimestamp();
+            DeliverFrame(frame, sequence);
+        }
+    }
+
+    private void DeliverFrame(CompletedFrame frame, uint sequence)
+    {
+        _sink.OnFrameReceived(frame.Data, frame.FrameType, sequence, frame.VideoCodec);
+    }
+
+    private void RequestMissing()
+    {
+        if (!_deliveredAny || _awaitingKeyframe)
+        {
+            return;
+        }
+
+        List<uint>? holes = null;
+
+        for (uint seq = _lastDelivered + 1; seq <= _highestSeen && (holes?.Count ?? 0) < MaxHolesPerRequest; seq++)
+        {
+            if (!_hold.ContainsKey(seq))
+            {
+                (holes ??= new List<uint>()).Add(seq);
             }
         }
 
-        if (outdated is not null)
+        if (holes is null || holes.Count == 0)
         {
-            foreach (uint sequence in outdated)
-            {
-                _pending.Remove(sequence);
-            }
-            _chainBroken = true;
+            return;
         }
+
+        SendRequest(holes, isNack: true);
     }
 
-    private void ExpirePending()
+    private void ExpireStale()
     {
         long now = Stopwatch.GetTimestamp();
         List<uint>? expired = null;
 
-        foreach (KeyValuePair<uint, PendingFrame> pair in _pending)
+        foreach (KeyValuePair<uint, CompletedFrame> pair in _hold)
         {
-            if (Stopwatch.GetElapsedTime(pair.Value.FirstSeenTicks) > PendingExpiry)
+            if (Stopwatch.GetElapsedTime(pair.Value.FirstSeenTicks) > HoleTimeout)
             {
                 (expired ??= new List<uint>()).Add(pair.Key);
             }
@@ -169,29 +256,57 @@ public sealed class FrameReceiver
 
         if (expired is not null)
         {
-            foreach (uint sequence in expired)
+            foreach (uint seq in expired)
             {
-                _pending.Remove(sequence);
+                _hold.Remove(seq);
             }
-            _chainBroken = true;
+        }
+
+        bool progressedRecently = Stopwatch.GetElapsedTime(_lastProgressTicks) < HoleTimeout;
+
+        if (!progressedRecently && !_awaitingKeyframe)
+        {
+            _awaitingKeyframe = true;
+            _pending.Clear();
+            _lastProgressTicks = Stopwatch.GetTimestamp();
+            SendRequest(new List<uint>(), isNack: false);
         }
     }
 
-    private void SendKeyframeRequest()
+    private void SendRequest(List<uint> missingSequences, bool isNack)
     {
         long now = Stopwatch.GetTimestamp();
 
-        if (Stopwatch.GetElapsedTime(_lastRequestTicks) < KeyframeRequestInterval)
+        if (Stopwatch.GetElapsedTime(_lastRequestTicks) < RequestInterval)
         {
             return;
         }
 
         _lastRequestTicks = now;
-        _keyframeRequestCount++;
 
-        var packet = new Packet(MessageType.KeyframeRequest, Array.Empty<byte>());
+        if (isNack)
+        {
+            NackCount++;
+        }
+        else
+        {
+            KeyframeRequestCount++;
+        }
+
+        var payload = new byte[1 + missingSequences.Count * 4];
+        payload[0] = (byte)missingSequences.Count;
+
+        for (int i = 0; i < missingSequences.Count; i++)
+        {
+            BinaryPrimitives.WriteUInt32BigEndian(payload.AsSpan(1 + i * 4, 4), missingSequences[i]);
+        }
+        var packet = new Packet(MessageType.KeyframeRequest, payload);
         byte[] bytes = PacketWriter.Serialize(packet);
 
         _ = _transport.SendToAsync(bytes, _remote);
+    }
+
+    public void Dispose()
+    {
     }
 }
