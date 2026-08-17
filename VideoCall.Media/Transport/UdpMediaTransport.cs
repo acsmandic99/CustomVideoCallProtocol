@@ -49,6 +49,10 @@ public sealed class UdpMediaTransport : IUdpMediaTransport
             {
                 break;
             }
+            catch (Exception)
+            {
+                continue;
+            }
 
             DatagramReceived?.Invoke(result.Buffer, result.RemoteEndPoint);
         }

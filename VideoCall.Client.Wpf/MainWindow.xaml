@@ -23,7 +23,10 @@
                 <ComboBox x:Name="SourceCombo" Width="110" Margin="4,0,0,0" SelectedIndex="0" VerticalContentAlignment="Center">
                     <ComboBoxItem Content="Web camera"/>
                     <ComboBoxItem Content="Synthetic"/>
+                    <ComboBoxItem Content="Video file"/>
                 </ComboBox>
+                <TextBlock Text="Server:" VerticalAlignment="Center" Margin="16,0,0,0"/>
+                <TextBox x:Name="ServerBox" Width="110" Margin="4,0,0,0" Text="127.0.0.1"/>
                 <TextBlock Text="Codec:" VerticalAlignment="Center" Margin="16,0,0,0"/>
                 <ComboBox x:Name="CodecCombo" Width="90" Margin="4,0,0,0" SelectedIndex="0" VerticalContentAlignment="Center">
                     <ComboBoxItem Content="H.264"/>

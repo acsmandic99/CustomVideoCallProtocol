@@ -77,7 +77,7 @@ public partial class MainWindow : Window, ISignalingListener
 
         try
         {
-            await _signaling.ConnectAsync(ServerHost, ServerPort);
+            await _signaling.ConnectAsync(ServerBox.Text.Trim(), ServerPort);
             bool ok = await _signaling.RegisterAsync(name);
 
             if (!ok)
@@ -121,7 +121,7 @@ public partial class MainWindow : Window, ISignalingListener
 
         try
         {
-            _activeCallId = await _signaling.CallAsync(callee, "127.0.0.1", _localUdpPort);
+            _activeCallId = await _signaling.CallAsync(callee, _signaling.LocalIp ?? "127.0.0.1", _localUdpPort);
         }
         catch (Exception ex)
         {
@@ -143,7 +143,7 @@ public partial class MainWindow : Window, ISignalingListener
         _activeCallId = _incomingCallId;
         _incomingCallId = Guid.Empty;
 
-        await _signaling.AcceptCallAsync(_activeCallId, "127.0.0.1", _localUdpPort);
+        await _signaling.AcceptCallAsync(_activeCallId, _signaling.LocalIp ?? "127.0.0.1", _localUdpPort);
 
         if (_remoteMediaEndpoint is not null)
         {
@@ -207,9 +207,44 @@ public partial class MainWindow : Window, ISignalingListener
 
     private void StartMedia(IPEndPoint remote)
     {
+        int sourceIndex = SourceCombo.SelectedIndex;
+        int width = 640;
+        int height = 480;
+        int fps = 30;
+
+        if (sourceIndex == 2)
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "Select video file",
+                Filter = "Video files|*.mp4;*.avi;*.mkv;*.mov;*.wmv|All files|*.*",
+            };
+
+            if (dialog.ShowDialog() != true)
+            {
+                StatusText.Text = "No video file selected.";
+                return;
+            }
+
+            var probe = FileVideoSource.Probe(dialog.FileName);
+
+            if (probe is null)
+            {
+                StatusText.Text = $"Cannot open video file: {dialog.FileName}";
+                return;
+            }
+
+            (width, height, fps) = probe.Value;
+            _camera = new FileVideoSource(dialog.FileName);
+        }
+        else
+        {
+            _camera = sourceIndex == 1 ? new SyntheticCamera() : new OpenCvCamera();
+        }
+
         _videoCodec = CodecCombo.SelectedIndex == 1 ? VideoCodec.Jpeg : VideoCodec.H264;
         _encoder = _videoCodec == VideoCodec.H264
-            ? new H264VideoEncoder(640, 480, 30)
+            ? new H264VideoEncoder(width, height, fps)
             : new JpegVideoEncoder();
 
         _lossyTransport = new LossyTransportDecorator(new UdpMediaTransport(), _selectedDropPercent);
@@ -217,12 +252,13 @@ public partial class MainWindow : Window, ISignalingListener
 
         _mediaSession = new MediaSession(_lossyTransport, remote, _sink);
         _mediaSession.KeyframeRequested += OnKeyframeRequested;
+        _mediaSession.SendError += OnSendError;
         _mediaSession.Start(_localUdpPort);
+        StatusText.Text = $"media: bound {_localUdpPort}, sending to {remote}";
 
-        _camera = SourceCombo.SelectedIndex == 1 ? new SyntheticCamera() : new OpenCvCamera();
         _camera.FrameCaptured += OnCameraFrame;
         _camera.Failed += OnCameraFailed;
-        _camera.Start(640, 480, 30);
+        _camera.Start(width, height, fps);
 
         _framesSent = 0;
         _framesReceived = 0;
@@ -247,6 +283,7 @@ public partial class MainWindow : Window, ISignalingListener
         if (_mediaSession is not null)
         {
             _mediaSession.KeyframeRequested -= OnKeyframeRequested;
+            _mediaSession.SendError -= OnSendError;
             _mediaSession.Dispose();
             _mediaSession = null;
         }
@@ -275,6 +312,14 @@ public partial class MainWindow : Window, ISignalingListener
 
             await _signaling.DisconnectAsync();
         }
+    }
+
+    private void OnSendError(Exception ex)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            StatusText.Text = $"Send error: {ex.Message}";
+        });
     }
 
     private void OnKeyframeRequested()
@@ -328,7 +373,7 @@ public partial class MainWindow : Window, ISignalingListener
         _sentLastTick = _framesSent;
         _receivedLastTick = _framesReceived;
 
-        StatusText.Text = $"In call. sent {_framesSent} ({sentFps} fps), received {_framesReceived} ({receivedFps} fps), loss {_lossyTransport?.DropPercent ?? 0}%";
+        StatusText.Text = $"In call. sent {_framesSent} ({sentFps} fps), received {_framesReceived} ({receivedFps} fps), dgrams-in {_mediaSession?.ReceivedDatagrams ?? 0}, to {_remoteMediaEndpoint}, loss {_lossyTransport?.DropPercent ?? 0}%";
     }
 
     public void OnDisconnected()
@@ -425,15 +470,25 @@ public partial class MainWindow : Window, ISignalingListener
 
         public void OnFrameReceived(ReadOnlyMemory<byte> data, FrameType frameType, uint sequence, VideoCodec videoCodec)
         {
-            IVideoDecoder decoder = videoCodec == VideoCodec.H264
-                ? (_owner._h264Decoder ??= new H264VideoDecoder())
-                : _owner._jpegDecoder;
-
-            VideoFrame? frame = decoder.Decode(data.ToArray(), frameType);
-
-            if (frame is not null)
+            try
             {
-                _owner.OnRemoteFrame(frame);
+                IVideoDecoder decoder = videoCodec == VideoCodec.H264
+                    ? (_owner._h264Decoder ??= new H264VideoDecoder())
+                    : _owner._jpegDecoder;
+
+                VideoFrame? frame = decoder.Decode(data.ToArray(), frameType);
+
+                if (frame is not null)
+                {
+                    _owner.OnRemoteFrame(frame);
+                }
+            }
+            catch (Exception ex)
+            {
+                _owner.Dispatcher.BeginInvoke(() =>
+                {
+                    _owner.StatusText.Text = $"Decode error: {ex.Message}";
+                });
             }
         }
     }

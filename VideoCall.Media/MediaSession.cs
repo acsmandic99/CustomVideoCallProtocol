@@ -18,6 +18,7 @@ public sealed class MediaSession : IDisposable
     }
 
     public int KeyframeRequestCount => _receiver.KeyframeRequestCount;
+    public int NackCount => _receiver.NackCount;
 
     public MediaSession(IUdpMediaTransport transport, IPEndPoint remote, IFrameSink sink)
     {
@@ -37,8 +38,18 @@ public sealed class MediaSession : IDisposable
         _sender.SendFrame(data, frameType, videoCodec);
     }
 
+    public event Action<Exception>? SendError
+    {
+        add => _sender.SendError += value;
+        remove => _sender.SendError -= value;
+    }
+
+    public int ReceivedDatagrams { get; private set; }
+
     private void OnDatagramReceived(ReadOnlyMemory<byte> data, IPEndPoint from)
     {
+        ReceivedDatagrams++;
+
         if (!PacketReader.TryParse(data.Span, out Packet? packet) || packet is null)
         {
             return;

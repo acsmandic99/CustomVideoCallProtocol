@@ -25,6 +25,7 @@ public sealed class SignalingClient : IDisposable
     private TaskCompletionSource<Guid>? _callRequestTcs;
 
     public bool IsConnected => _tcpClient?.Connected ?? false;
+    public string? LocalIp { get; private set; }
 
     public SignalingClient(IMessageCodec codec, ISignalingListener listener, ILogger<SignalingClient> logger)
     {
@@ -38,6 +39,8 @@ public sealed class SignalingClient : IDisposable
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _tcpClient = new TcpClient();
         await _tcpClient.ConnectAsync(host, port, cancellationToken);
+        var localEp = _tcpClient.Client.LocalEndPoint as System.Net.IPEndPoint;
+        LocalIp = localEp?.Address.IsIPv4MappedToIPv6 == true ? localEp.Address.MapToIPv4().ToString() : localEp?.Address.ToString();
         _stream = _tcpClient.GetStream();
         _framingReader = new TcpFramingReader();
         _receiveTask = ReceiveLoopAsync(_cts.Token);

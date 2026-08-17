@@ -23,6 +23,7 @@ public sealed class FrameSender : IDisposable
     private uint _nextSequence;
 
     public event Action? KeyframeRequested;
+    public event Action<Exception>? SendError;
 
     public int RetransmittedFrames { get; private set; }
 
@@ -89,8 +90,9 @@ public sealed class FrameSender : IDisposable
             {
                 await SendFragmentsAsync(frame.Data, frame.FrameType, frame.VideoCodec, null);
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                SendError?.Invoke(ex);
                 return;
             }
         }
