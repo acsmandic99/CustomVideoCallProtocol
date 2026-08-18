@@ -6,6 +6,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using VideoCall.Codecs;
+using VideoCall.Codecs.Audio;
 using VideoCall.Codecs.FFmpeg;
 using VideoCall.Codecs.OpenCv;
 using VideoCall.Media;
@@ -33,6 +34,8 @@ public partial class MainWindow : Window, ISignalingListener
     private MediaSession? _mediaSession;
     private LossyTransportDecorator? _lossyTransport;
     private ICamera? _camera;
+    private AudioCapture? _audioCapture;
+    private AudioPlayer? _audioPlayer;
     private DecoderSink? _sink;
 
     private WriteableBitmap? _localBitmap;
@@ -257,6 +260,11 @@ public partial class MainWindow : Window, ISignalingListener
         StatusText.Text = $"media: bound {_localUdpPort}, sending to {remote}";
 
         _camera.FrameCaptured += OnCameraFrame;
+        _audioCapture = new AudioCapture();
+        _audioCapture.ChunkCaptured += OnAudioChunk;
+        _audioCapture.Start();
+        _audioPlayer = new AudioPlayer();
+        _audioPlayer.Start();
         _camera.Failed += OnCameraFailed;
         _camera.Start(width, height, fps);
 
@@ -333,6 +341,11 @@ public partial class MainWindow : Window, ISignalingListener
         {
             StatusText.Text = $"Camera error: {reason}";
         });
+    }
+
+    private void OnAudioChunk(byte[] chunk)
+    {
+        _mediaSession?.SendFrame(chunk, Protocol.Enums.FrameType.Audio, Protocol.Enums.VideoCodec.Pcm16);
     }
 
     private void OnCameraFrame(VideoFrame frame)
