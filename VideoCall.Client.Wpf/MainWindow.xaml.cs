@@ -226,6 +226,7 @@ public partial class MainWindow : Window, ISignalingListener
             if (dialog.ShowDialog() != true)
             {
                 StatusText.Text = "No video file selected.";
+                AbortMediaCall();
                 return;
             }
 
@@ -234,6 +235,7 @@ public partial class MainWindow : Window, ISignalingListener
             if (probe is null)
             {
                 StatusText.Text = $"Cannot open video file: {dialog.FileName}";
+                AbortMediaCall();
                 return;
             }
 
@@ -338,6 +340,21 @@ public partial class MainWindow : Window, ISignalingListener
         {
             StatusText.Text = $"Send error: {ex.Message}";
         });
+    }
+
+
+    private async void AbortMediaCall()
+    {
+        if (_signaling is not null && _activeCallId != Guid.Empty)
+        {
+            await _signaling.HangupAsync(_activeCallId);
+        }
+
+        _activeCallId = Guid.Empty;
+        HangupButton.IsEnabled = false;
+        CallButton.IsEnabled = true;
+        AcceptButton.IsEnabled = false;
+        RejectButton.IsEnabled = false;
     }
 
     private void OnKeyframeRequested()

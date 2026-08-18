@@ -19,7 +19,7 @@ public sealed class FileVideoSource : ICamera
 
     public static (int Width, int Height, int Fps)? Probe(string path)
     {
-        using var capture = new VideoCapture(path);
+        using var capture = new VideoCapture(path, VideoCaptureAPIs.FFMPEG);
 
         if (!capture.IsOpened())
         {
@@ -32,7 +32,7 @@ public sealed class FileVideoSource : ICamera
 
     public void Start(int width, int height, int fps)
     {
-        var capture = new VideoCapture(_path);
+        var capture = new VideoCapture(_path, VideoCaptureAPIs.FFMPEG);
 
         if (!capture.IsOpened())
         {
