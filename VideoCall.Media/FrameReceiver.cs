@@ -58,7 +58,7 @@ public sealed class FrameReceiver
     private bool _deliveredAny;
     private bool _awaitingKeyframe;
     private uint _highestSeen;
-    private readonly HashSet<uint> _audioSeen = new();
+    private readonly Dictionary<uint, PendingFrame> _audioPending = new();
     private long _lastRequestTicks;
     private long _lastProgressTicks = Stopwatch.GetTimestamp();
 
@@ -89,6 +89,12 @@ public sealed class FrameReceiver
         }
 
         uint sequence = packet.Sequence;
+
+        if (packet.FrameType == FrameType.Audio)
+        {
+            HandleAudioPacket(packet, videoCodec, fragmentIndex, fragmentCount, sequence);
+            return;
+        }
 
         if (_deliveredAny && sequence <= _lastDelivered)
         {
@@ -132,19 +138,50 @@ public sealed class FrameReceiver
             }
 
             _pending.Remove(sequence);
-
-            if (pending.FrameType == FrameType.Audio)
-            {
-                _audioSeen.Add(sequence);
-                _sink.OnFrameReceived(data, pending.FrameType, sequence, pending.VideoCodec);
-                return;
-            }
-
             _hold[sequence] = new CompletedFrame(data, pending.FrameType, pending.VideoCodec);
         }
 
         DeliverInOrder();
         RequestMissing();
+    }
+
+
+    private void HandleAudioPacket(Packet packet, VideoCodec videoCodec, ushort fragmentIndex, ushort fragmentCount, uint sequence)
+    {
+        if (!_audioPending.TryGetValue(sequence, out PendingFrame? pending))
+        {
+            pending = new PendingFrame(FrameType.Audio, videoCodec, fragmentCount);
+            _audioPending[sequence] = pending;
+        }
+
+        if (pending.Received[fragmentIndex])
+        {
+            return;
+        }
+
+        var fragment = new byte[packet.Payload.Length - 5];
+        packet.Payload.AsSpan(5).CopyTo(fragment);
+        pending.Fragments[fragmentIndex] = fragment;
+        pending.Received[fragmentIndex] = true;
+        pending.ReceivedCount++;
+
+        if (pending.ReceivedCount != pending.FragmentCount)
+        {
+            return;
+        }
+
+        int totalLength = pending.Fragments.Sum(f => f.Length);
+        var data = new byte[totalLength];
+        int offset = 0;
+
+        foreach (byte[] part in pending.Fragments)
+        {
+            Buffer.BlockCopy(part, 0, data, offset, part.Length);
+            offset += part.Length;
+        }
+
+        _audioPending.Remove(sequence);
+        _sink.OnFrameReceived(data, FrameType.Audio, sequence, videoCodec);
     }
 
     private void DeliverInOrder()
@@ -205,12 +242,6 @@ public sealed class FrameReceiver
         {
             uint next = _lastDelivered + 1;
 
-            if (_audioSeen.Contains(next))
-            {
-                _lastDelivered = next;
-                continue;
-            }
-
             if (!_hold.Remove(next, out CompletedFrame? frame))
             {
                 break;
@@ -249,7 +280,7 @@ public sealed class FrameReceiver
 
         for (uint seq = _lastDelivered + 1; seq <= _highestSeen && (holes?.Count ?? 0) < MaxHolesPerRequest; seq++)
         {
-            if (!_hold.ContainsKey(seq) && !_audioSeen.Contains(seq))
+            if (!_hold.ContainsKey(seq))
             {
                 (holes ??= new List<uint>()).Add(seq);
             }

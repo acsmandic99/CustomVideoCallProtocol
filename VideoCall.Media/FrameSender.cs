@@ -20,7 +20,8 @@ public sealed class FrameSender : IDisposable
     private readonly object _recentLock = new();
     private readonly Dictionary<uint, (byte[] Data, FrameType FrameType, VideoCodec Codec)> _recent = new();
     private readonly Queue<uint> _recentOrder = new();
-    private uint _nextSequence;
+    private uint _nextVideoSequence;
+    private uint _nextAudioSequence;
 
     public event Action? KeyframeRequested;
     public event Action<Exception>? SendError;
@@ -100,7 +101,7 @@ public sealed class FrameSender : IDisposable
 
     private async Task SendFragmentsAsync(byte[] data, FrameType frameType, VideoCodec videoCodec, uint? retransmitSequence)
     {
-        uint sequence = retransmitSequence ?? ++_nextSequence;
+        uint sequence = retransmitSequence ?? (frameType == FrameType.Audio ? ++_nextAudioSequence : ++_nextVideoSequence);
 
         if (retransmitSequence is null)
         {
