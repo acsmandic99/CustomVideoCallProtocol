@@ -288,6 +288,16 @@ public partial class MainWindow : Window, ISignalingListener
             _camera = null;
         }
 
+        if (_audioCapture is not null)
+        {
+            _audioCapture.ChunkCaptured -= OnAudioChunk;
+            _audioCapture.Dispose();
+            _audioCapture = null;
+        }
+
+        _audioPlayer?.Dispose();
+        _audioPlayer = null;
+
         if (_mediaSession is not null)
         {
             _mediaSession.KeyframeRequested -= OnKeyframeRequested;
@@ -485,6 +495,12 @@ public partial class MainWindow : Window, ISignalingListener
         {
             try
             {
+                if (frameType == FrameType.Audio)
+                {
+                    _owner._audioPlayer?.Play(data.ToArray());
+                    return;
+                }
+
                 IVideoDecoder decoder = videoCodec == VideoCodec.H264
                     ? (_owner._h264Decoder ??= new H264VideoDecoder())
                     : _owner._jpegDecoder;
