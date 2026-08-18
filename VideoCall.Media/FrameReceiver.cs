@@ -58,6 +58,7 @@ public sealed class FrameReceiver
     private bool _deliveredAny;
     private bool _awaitingKeyframe;
     private uint _highestSeen;
+    private readonly HashSet<uint> _audioSeen = new();
     private long _lastRequestTicks;
     private long _lastProgressTicks = Stopwatch.GetTimestamp();
 
@@ -131,6 +132,15 @@ public sealed class FrameReceiver
             }
 
             _pending.Remove(sequence);
+
+            if (pending.FrameType == FrameType.Audio)
+            {
+                _deliveredAny = true;
+                _audioSeen.Add(sequence);
+                _sink.OnFrameReceived(data, pending.FrameType, sequence, pending.VideoCodec);
+                return;
+            }
+
             _hold[sequence] = new CompletedFrame(data, pending.FrameType, pending.VideoCodec);
         }
 
@@ -227,7 +237,7 @@ public sealed class FrameReceiver
 
         for (uint seq = _lastDelivered + 1; seq <= _highestSeen && (holes?.Count ?? 0) < MaxHolesPerRequest; seq++)
         {
-            if (!_hold.ContainsKey(seq))
+            if (!_hold.ContainsKey(seq) && !_audioSeen.Contains(seq))
             {
                 (holes ??= new List<uint>()).Add(seq);
             }
