@@ -15,6 +15,7 @@ public sealed class UdpMediaTransport : IUdpMediaTransport
     {
         _cts = new CancellationTokenSource();
         _udpClient = new UdpClient(localPort);
+        _udpClient.Client.ReceiveBufferSize = 1_048_576;
         _receiveTask = ReceiveLoopAsync(_cts.Token);
     }
 
