@@ -135,7 +135,6 @@ public sealed class FrameReceiver
 
             if (pending.FrameType == FrameType.Audio)
             {
-                _deliveredAny = true;
                 _audioSeen.Add(sequence);
                 _sink.OnFrameReceived(data, pending.FrameType, sequence, pending.VideoCodec);
                 return;
@@ -202,10 +201,23 @@ public sealed class FrameReceiver
             Deliver(keySeq.Value);
         }
 
-        while (_hold.Remove(_lastDelivered + 1, out CompletedFrame? frame))
+        while (true)
         {
-            DeliverFrame(frame, _lastDelivered + 1);
-            _lastDelivered++;
+            uint next = _lastDelivered + 1;
+
+            if (_audioSeen.Contains(next))
+            {
+                _lastDelivered = next;
+                continue;
+            }
+
+            if (!_hold.Remove(next, out CompletedFrame? frame))
+            {
+                break;
+            }
+
+            DeliverFrame(frame, next);
+            _lastDelivered = next;
             _lastProgressTicks = Stopwatch.GetTimestamp();
         }
     }
