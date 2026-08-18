@@ -40,11 +40,47 @@ public sealed class SignalingClient : IDisposable
         _tcpClient = new TcpClient();
         await _tcpClient.ConnectAsync(host, port, cancellationToken);
         var localEp = _tcpClient.Client.LocalEndPoint as System.Net.IPEndPoint;
-        LocalIp = localEp?.Address.IsIPv4MappedToIPv6 == true ? localEp.Address.MapToIPv4().ToString() : localEp?.Address.ToString();
+        var localAddr = localEp?.Address.IsIPv4MappedToIPv6 == true ? localEp.Address.MapToIPv4() : localEp?.Address;
+        LocalIp = ResolveUsableLocalIp(localAddr, host);
         _stream = _tcpClient.GetStream();
         _framingReader = new TcpFramingReader();
         _receiveTask = ReceiveLoopAsync(_cts.Token);
         _logger.LogInformation("Connected to {Host}:{Port}", host, port);
+    }
+
+
+    private static string? ResolveUsableLocalIp(System.Net.IPAddress? connectedAddress, string serverHost)
+    {
+        if (connectedAddress is null)
+        {
+            return null;
+        }
+
+        if (!System.Net.IPAddress.IsLoopback(connectedAddress))
+        {
+            return connectedAddress.ToString();
+        }
+
+        var candidates = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+            .Where(n => n.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up)
+            .SelectMany(n => n.GetIPProperties().UnicastAddresses.Select(u => u.Address))
+            .Where(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !System.Net.IPAddress.IsLoopback(a))
+            .ToList();
+
+        if (System.Net.IPAddress.TryParse(serverHost, out System.Net.IPAddress? serverIp))
+        {
+            byte[] sb = serverIp.GetAddressBytes();
+            foreach (System.Net.IPAddress c in candidates)
+            {
+                byte[] cb = c.GetAddressBytes();
+                if (cb[0] == sb[0] && cb[1] == sb[1])
+                {
+                    return c.ToString();
+                }
+            }
+        }
+
+        return candidates.FirstOrDefault()?.ToString() ?? connectedAddress.ToString();
     }
 
     public async Task DisconnectAsync()
