@@ -420,7 +420,7 @@ public partial class MainWindow : Window, ISignalingListener
         _sentLastTick = _framesSent;
         _receivedLastTick = _framesReceived;
 
-        StatusText.Text = $"In call. sent {_framesSent} ({sentFps} fps), received {_framesReceived} ({receivedFps} fps), dgrams-in {_mediaSession?.ReceivedDatagrams ?? 0}, enc0 {_emptyEncodes}, to {_remoteMediaEndpoint}, loss {_lossyTransport?.DropPercent ?? 0}%";
+        StatusText.Text = $"In call. sent {_framesSent} ({sentFps} fps), received {_framesReceived} ({receivedFps} fps), dgrams-in {_mediaSession?.ReceivedDatagrams ?? 0}, enc0 {_emptyEncodes}, on {_localUdpPort}, to {_remoteMediaEndpoint}, loss {_lossyTransport?.DropPercent ?? 0}%";
     }
 
     public void OnDisconnected()
