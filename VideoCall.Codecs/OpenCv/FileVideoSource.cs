@@ -26,7 +26,7 @@ public sealed class FileVideoSource : ICamera
             return null;
         }
 
-        int fps = (int)Math.Round(Math.Max(1, capture.Fps));
+        int fps = (int)Math.Min(60, Math.Round(Math.Max(1, capture.Fps)));
         return ((int)capture.FrameWidth, (int)capture.FrameHeight, fps);
     }
 
@@ -48,7 +48,7 @@ public sealed class FileVideoSource : ICamera
     private void Loop(VideoCapture capture, CancellationToken cancellationToken)
     {
         using var frame = new Mat();
-        int delay = (int)(1000 / Math.Max(1, Math.Round(capture.Fps)));
+        int delay = (int)(1000 / Math.Min(60, Math.Max(1, Math.Round(capture.Fps))));
 
         while (!cancellationToken.IsCancellationRequested)
         {

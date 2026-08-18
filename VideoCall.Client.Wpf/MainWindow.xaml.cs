@@ -52,6 +52,7 @@ public partial class MainWindow : Window, ISignalingListener
     private int _sentLastTick;
     private int _receivedLastTick;
     private int _selectedDropPercent;
+    private int _emptyEncodes;
 
     public MainWindow()
     {
@@ -383,6 +384,12 @@ public partial class MainWindow : Window, ISignalingListener
         }
 
         (byte[] data, FrameType frameType) = _encoder.Encode(frame);
+
+        if (data.Length == 0)
+        {
+            System.Threading.Interlocked.Increment(ref _emptyEncodes);
+        }
+
         System.Threading.Interlocked.Increment(ref _framesSent);
         _mediaSession?.SendFrame(data, frameType, _videoCodec);
 
@@ -413,7 +420,7 @@ public partial class MainWindow : Window, ISignalingListener
         _sentLastTick = _framesSent;
         _receivedLastTick = _framesReceived;
 
-        StatusText.Text = $"In call. sent {_framesSent} ({sentFps} fps), received {_framesReceived} ({receivedFps} fps), dgrams-in {_mediaSession?.ReceivedDatagrams ?? 0}, to {_remoteMediaEndpoint}, loss {_lossyTransport?.DropPercent ?? 0}%";
+        StatusText.Text = $"In call. sent {_framesSent} ({sentFps} fps), received {_framesReceived} ({receivedFps} fps), dgrams-in {_mediaSession?.ReceivedDatagrams ?? 0}, enc0 {_emptyEncodes}, to {_remoteMediaEndpoint}, loss {_lossyTransport?.DropPercent ?? 0}%";
     }
 
     public void OnDisconnected()
