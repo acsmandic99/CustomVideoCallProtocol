@@ -61,11 +61,23 @@ public sealed class SignalingClient : IDisposable
             return connectedAddress.ToString();
         }
 
-        var candidates = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
+        var interfaces = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces()
             .Where(n => n.OperationalStatus == System.Net.NetworkInformation.OperationalStatus.Up)
+            .ToList();
+
+        var candidates = interfaces
+            .Where(n => n.GetIPProperties().GatewayAddresses.Count > 0)
             .SelectMany(n => n.GetIPProperties().UnicastAddresses.Select(u => u.Address))
             .Where(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && !System.Net.IPAddress.IsLoopback(a))
             .ToList();
+
+        candidates.AddRange(interfaces
+            .Where(n => n.GetIPProperties().GatewayAddresses.Count == 0)
+            .SelectMany(n => n.GetIPProperties().UnicastAddresses.Select(u => u.Address))
+            .Where(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork
+                && !System.Net.IPAddress.IsLoopback(a)
+                && !a.ToString().StartsWith("169.254.")
+                && !a.ToString().StartsWith("192.168.56.")));
 
         if (System.Net.IPAddress.TryParse(serverHost, out System.Net.IPAddress? serverIp))
         {
