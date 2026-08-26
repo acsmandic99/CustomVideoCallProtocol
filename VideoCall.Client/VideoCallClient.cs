@@ -11,7 +11,7 @@ using VideoCall.Network.Signaling;
 using VideoCall.Protocol.Enums;
 using VideoCall.Protocol.Signaling;
 
-namespace VideoCall.Client.Wpf;
+namespace VideoCall.Client;
 
 public sealed class VideoCallClient : ISignalingListener, IDisposable
 {

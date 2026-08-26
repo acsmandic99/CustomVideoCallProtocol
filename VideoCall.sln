@@ -23,6 +23,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoCall.Codecs", "VideoCa
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoCall.Benchmark.Console", "VideoCall.Benchmark.Console\VideoCall.Benchmark.Console.csproj", "{D836B8FC-269A-4F78-A17F-51D012889763}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "VideoCall.Client", "VideoCall.Client\VideoCall.Client.csproj", "{4213F9F5-D0F5-494D-840E-AF5511A6DC5D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -153,6 +155,18 @@ Global
 		{D836B8FC-269A-4F78-A17F-51D012889763}.Release|x64.Build.0 = Release|Any CPU
 		{D836B8FC-269A-4F78-A17F-51D012889763}.Release|x86.ActiveCfg = Release|Any CPU
 		{D836B8FC-269A-4F78-A17F-51D012889763}.Release|x86.Build.0 = Release|Any CPU
+		{4213F9F5-D0F5-494D-840E-AF5511A6DC5D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4213F9F5-D0F5-494D-840E-AF5511A6DC5D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4213F9F5-D0F5-494D-840E-AF5511A6DC5D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{4213F9F5-D0F5-494D-840E-AF5511A6DC5D}.Debug|x64.Build.0 = Debug|Any CPU
+		{4213F9F5-D0F5-494D-840E-AF5511A6DC5D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{4213F9F5-D0F5-494D-840E-AF5511A6DC5D}.Debug|x86.Build.0 = Debug|Any CPU
+		{4213F9F5-D0F5-494D-840E-AF5511A6DC5D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4213F9F5-D0F5-494D-840E-AF5511A6DC5D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4213F9F5-D0F5-494D-840E-AF5511A6DC5D}.Release|x64.ActiveCfg = Release|Any CPU
+		{4213F9F5-D0F5-494D-840E-AF5511A6DC5D}.Release|x64.Build.0 = Release|Any CPU
+		{4213F9F5-D0F5-494D-840E-AF5511A6DC5D}.Release|x86.ActiveCfg = Release|Any CPU
+		{4213F9F5-D0F5-494D-840E-AF5511A6DC5D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

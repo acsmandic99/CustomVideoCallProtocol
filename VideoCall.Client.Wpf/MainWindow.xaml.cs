@@ -4,7 +4,6 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using VideoCall.Codecs;
-using VideoCall.Codecs.FFmpeg;
 using VideoCall.Protocol.Enums;
 
 namespace VideoCall.Client.Wpf;
