@@ -17,6 +17,8 @@
                 <Button x:Name="AcceptButton" Content="Accept" Width="70" Margin="4,0,0,0" IsEnabled="False" Click="AcceptButton_Click"/>
                 <Button x:Name="RejectButton" Content="Reject" Width="70" Margin="4,0,0,0" IsEnabled="False" Click="RejectButton_Click"/>
                 <Button x:Name="HangupButton" Content="Hangup" Width="70" Margin="4,0,0,0" IsEnabled="False" Click="HangupButton_Click"/>
+                <ToggleButton x:Name="MicToggle" Content="Mic" Width="50" Margin="16,0,0,0" IsChecked="True" Checked="MicToggle_Changed" Unchecked="MicToggle_Changed"/>
+                <ToggleButton x:Name="CamToggle" Content="Cam" Width="50" Margin="4,0,0,0" IsChecked="True" Checked="CamToggle_Changed" Unchecked="CamToggle_Changed"/>
             </StackPanel>
             <StackPanel x:Name="LossPanel" Orientation="Horizontal">
                 <TextBlock Text="Source:" VerticalAlignment="Center"/>
@@ -27,6 +29,8 @@
                 </ComboBox>
                 <TextBlock Text="Server:" VerticalAlignment="Center" Margin="16,0,0,0"/>
                 <TextBox x:Name="ServerBox" Width="110" Margin="4,0,0,0" Text="127.0.0.1"/>
+                <TextBlock Text="Mic:" VerticalAlignment="Center" Margin="16,0,0,0"/>
+                <ComboBox x:Name="MicCombo" Width="150" Margin="4,0,0,0" VerticalContentAlignment="Center"/>
                 <TextBlock Text="Codec:" VerticalAlignment="Center" Margin="16,0,0,0"/>
                 <ComboBox x:Name="CodecCombo" Width="90" Margin="4,0,0,0" SelectedIndex="0" VerticalContentAlignment="Center">
                     <ComboBoxItem Content="H.264"/>

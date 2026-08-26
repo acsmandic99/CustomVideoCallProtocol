@@ -71,6 +71,31 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
     public int NackCount => _mediaSession?.NackCount ?? 0;
     public int KeyframeRequestCount => _mediaSession?.KeyframeRequestCount ?? 0;
 
+    public int MicrophoneIndex { get; set; }
+
+    private bool _microphoneMuted;
+    private bool _cameraMuted;
+
+    public bool MicrophoneMuted
+    {
+        get => _microphoneMuted;
+        set => _microphoneMuted = value;
+    }
+
+    public bool CameraMuted
+    {
+        get => _cameraMuted;
+        set
+        {
+            _cameraMuted = value;
+
+            if (!value && _encoder is not null)
+            {
+                _encoder.ForceKeyframe();
+            }
+        }
+    }
+
     public int DropPercent
     {
         get => _lossyTransport?.DropPercent ?? _lossPercent;
@@ -228,9 +253,15 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
         _camera.Failed += reason => CameraError?.Invoke(reason);
         _camera.Start(width, height, fps);
 
-        _audioCapture = new AudioCapture();
-        _audioCapture.ChunkCaptured += chunk => _mediaSession?.SendFrame(chunk, FrameType.Audio, VideoCodec.Pcm16);
-        _audioCapture.Start();
+        if (_camera is FileVideoSource fvs)
+        {
+            fvs.AudioCaptured += chunk => { if (!MicrophoneMuted) _mediaSession?.SendFrame(chunk, FrameType.Audio, VideoCodec.Pcm16); };
+            fvs.AudioUnavailable += StartMicrophone;
+        }
+        else
+        {
+            StartMicrophone();
+        }
 
         _audioPlayer = new AudioPlayer();
         _audioPlayer.Start();
@@ -240,6 +271,13 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
         EmptyEncodes = 0;
 
         CallEstablished?.Invoke();
+    }
+
+    private void StartMicrophone()
+    {
+        _audioCapture = new AudioCapture(MicrophoneIndex);
+        _audioCapture.ChunkCaptured += chunk => { if (!MicrophoneMuted) _mediaSession?.SendFrame(chunk, FrameType.Audio, VideoCodec.Pcm16); };
+        _audioCapture.Start();
     }
 
     private void StopMedia()
@@ -278,7 +316,7 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
 
     private void OnFrame(VideoFrame frame)
     {
-        if (_encoder is null)
+        if (_encoder is null || CameraMuted)
         {
             return;
         }

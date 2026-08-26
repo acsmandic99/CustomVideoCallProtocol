@@ -4,6 +4,16 @@ namespace VideoCall.Codecs.Audio;
 
 public sealed class AudioCapture : IDisposable
 {
+    public static string[] GetDeviceNames()
+    {
+        var names = new string[WaveInEvent.DeviceCount];
+        for (int i = 0; i < names.Length; i++)
+        {
+            names[i] = WaveInEvent.GetCapabilities(i).ProductName;
+        }
+        return names;
+    }
+
     public const int SampleRate = 8000;
     public const int Channels = 1;
     public const int Bits = 16;
@@ -59,8 +69,11 @@ public sealed class AudioCapture : IDisposable
 
 public sealed class AudioPlayer : IDisposable
 {
+    private static readonly TimeSpan Prebuffer = TimeSpan.FromMilliseconds(80);
+
     private readonly BufferedWaveProvider _provider;
     private readonly WaveOutEvent _waveOut;
+    private bool _started;
 
     public AudioPlayer()
     {
@@ -76,11 +89,16 @@ public sealed class AudioPlayer : IDisposable
     public void Play(byte[] chunk)
     {
         _provider.AddSamples(chunk, 0, chunk.Length);
+
+        if (!_started && _provider.BufferedDuration >= Prebuffer)
+        {
+            _started = true;
+            _waveOut.Play();
+        }
     }
 
     public void Start()
     {
-        _waveOut.Play();
     }
 
     public void Dispose()

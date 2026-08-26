@@ -30,6 +30,26 @@ public partial class MainWindow : Window
         _statusTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _statusTimer.Tick += (_, _) => UpdateStatus();
         Closed += (_, _) => _client.Dispose();
+        string[] micNames = Array.Empty<string>();
+
+        try
+        {
+            micNames = Codecs.Audio.AudioCapture.GetDeviceNames();
+        }
+        catch
+        {
+        }
+
+        foreach (string name in micNames)
+        {
+            MicCombo.Items.Add(name);
+        }
+
+        if (MicCombo.Items.Count > 0)
+        {
+            MicCombo.SelectedIndex = 0;
+        }
+
         WireClient(_client);
     }
 
@@ -103,6 +123,7 @@ public partial class MainWindow : Window
     private void ApplyConfiguration()
     {
         VideoCodec codec = CodecCombo.SelectedIndex == 1 ? VideoCodec.Jpeg : VideoCodec.H264;
+        _client.MicrophoneIndex = MicCombo.SelectedIndex < 0 ? 0 : MicCombo.SelectedIndex;
         _client.Configure(CurrentSource(), _videoFilePath, codec, _selectedDropPercent);
     }
 
@@ -201,6 +222,28 @@ public partial class MainWindow : Window
             SourceCombo.SelectedIndex = 0;
             StatusText.Text = "No video file selected, back to web camera.";
         }
+    }
+
+    private void MicToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsInitialized)
+        {
+            return;
+        }
+
+        _client.MicrophoneMuted = MicToggle.IsChecked != true;
+        StatusText.Text = MicToggle.IsChecked == true ? "Microphone on." : "Microphone muted.";
+    }
+
+    private void CamToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!IsInitialized)
+        {
+            return;
+        }
+
+        _client.CameraMuted = CamToggle.IsChecked != true;
+        StatusText.Text = CamToggle.IsChecked == true ? "Camera on." : "Camera off.";
     }
 
     private void LossButton_Click(object sender, RoutedEventArgs e)

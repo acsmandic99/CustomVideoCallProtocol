@@ -20,3 +20,4 @@ TestResults/
 *.swp
 Thumbs.db
 .DS_Store
+SESSION_HANDOFF.md
