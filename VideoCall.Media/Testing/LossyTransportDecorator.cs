@@ -26,6 +26,8 @@ public sealed class LossyTransportDecorator : IUdpMediaTransport
 
     public int DroppedCount { get; private set; }
 
+    public int RawReceivedCount => _inner is UdpMediaTransport real ? real.RawReceivedCount : 0;
+
     public LossyTransportDecorator(IUdpMediaTransport inner, int dropPercent = 0, int seed = 42, Func<Packet, bool>? dropPredicate = null)
     {
         _inner = inner;

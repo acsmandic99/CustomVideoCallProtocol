@@ -20,7 +20,7 @@
             </StackPanel>
             <StackPanel x:Name="LossPanel" Orientation="Horizontal">
                 <TextBlock Text="Source:" VerticalAlignment="Center"/>
-                <ComboBox x:Name="SourceCombo" Width="110" Margin="4,0,0,0" SelectedIndex="0" VerticalContentAlignment="Center">
+                <ComboBox x:Name="SourceCombo" Width="110" Margin="4,0,0,0" SelectedIndex="0" VerticalContentAlignment="Center" SelectionChanged="SourceCombo_SelectionChanged">
                     <ComboBoxItem Content="Web camera"/>
                     <ComboBoxItem Content="Synthetic"/>
                     <ComboBoxItem Content="Video file"/>

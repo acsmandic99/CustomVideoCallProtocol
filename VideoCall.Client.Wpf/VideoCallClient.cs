@@ -19,6 +19,7 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
     {
         WebCamera = 0,
         Synthetic = 1,
+        VideoFile = 2,
     }
 
     private SignalingClient? _signaling;
@@ -31,12 +32,13 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
     private IVideoDecoder? _h264Decoder;
     private readonly IVideoDecoder _jpegDecoder = new JpegVideoDecoder();
 
-    private string _myName = string.Empty;
-    private ushort _localUdpPort;
     private Guid _activeCallId;
     private Guid _incomingCallId;
     private IPEndPoint? _remoteEndpoint;
+    private ushort _localUdpPort;
+
     private SourceKind _source = SourceKind.WebCamera;
+    private string _videoFilePath = string.Empty;
     private VideoCodec _codec = VideoCodec.H264;
     private int _lossPercent;
     private int _captureWidth = 640;
@@ -44,17 +46,48 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
     private int _captureFps = 30;
 
     public event Action<IncomingCallMessage>? IncomingCall;
+    public event Action? Ringing;
     public event Action? CallEstablished;
+    public event Action<string>? CallRejected;
     public event Action<string>? CallEnded;
+    public event Action<VideoFrame>? LocalVideoFrame;
     public event Action<VideoFrame>? RemoteVideoFrame;
-    public event Action<byte[]>? RemoteAudioChunk;
     public event Action? DisconnectedFromServer;
+    public event Action<string>? CameraError;
+    public event Action<Exception>? SendError;
+    public event Action<Exception>? DecodeError;
 
+    public string RegisteredName { get; private set; } = string.Empty;
+    public bool IsRegistered => _signaling is not null;
     public bool IsInCall => _activeCallId != Guid.Empty;
+    public ushort MediaPort => _localUdpPort;
+    public IPEndPoint? RemoteEndpoint => _remoteEndpoint;
 
-    public void Configure(SourceKind source, VideoCodec codec, int lossPercent, int width = 640, int height = 480, int fps = 30)
+    public int SentFrames { get; private set; }
+    public int ReceivedFrames { get; private set; }
+    public int EmptyEncodes { get; private set; }
+    public int ReceivedDatagrams => _mediaSession?.ReceivedDatagrams ?? 0;
+    public int RawReceived => _lossyTransport?.RawReceivedCount ?? 0;
+    public int NackCount => _mediaSession?.NackCount ?? 0;
+    public int KeyframeRequestCount => _mediaSession?.KeyframeRequestCount ?? 0;
+
+    public int DropPercent
+    {
+        get => _lossyTransport?.DropPercent ?? _lossPercent;
+        set
+        {
+            _lossPercent = value;
+            if (_lossyTransport is not null)
+            {
+                _lossyTransport.DropPercent = value;
+            }
+        }
+    }
+
+    public void Configure(SourceKind source, string videoFilePath, VideoCodec codec, int lossPercent, int width = 640, int height = 480, int fps = 30)
     {
         _source = source;
+        _videoFilePath = videoFilePath;
         _codec = codec;
         _lossPercent = lossPercent;
         _captureWidth = width;
@@ -64,8 +97,8 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
 
     public async Task ConnectAndRegisterAsync(string serverHost, int serverPort, string userId)
     {
-        var codec = new BinaryMessageCodec(new DefaultSignalingMessageFactory());
-        _signaling = new SignalingClient(codec, this, NullLogger<SignalingClient>.Instance);
+        var codecFactory = new BinaryMessageCodec(new DefaultSignalingMessageFactory());
+        _signaling = new SignalingClient(codecFactory, this, NullLogger<SignalingClient>.Instance);
         _localUdpPort = (ushort)Random.Shared.Next(20000, 25000);
 
         await _signaling.ConnectAsync(serverHost, serverPort);
@@ -78,18 +111,22 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
             throw new InvalidOperationException("Registration failed: name already taken.");
         }
 
-        _myName = userId;
+        RegisteredName = userId;
     }
 
-    public async Task<Guid> CallAsync(string calleeId)
+    public async Task CallAsync(string calleeId)
     {
         if (_signaling is null)
         {
             throw new InvalidOperationException("Not connected.");
         }
 
+        if (calleeId == RegisteredName)
+        {
+            throw new InvalidOperationException("You cannot call yourself.");
+        }
+
         _activeCallId = await _signaling.CallAsync(calleeId, _signaling.LocalIp ?? "127.0.0.1", _localUdpPort);
-        return _activeCallId;
     }
 
     public async Task AcceptCallAsync()
@@ -130,7 +167,7 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
         }
 
         _activeCallId = Guid.Empty;
-        CallEnded?.Invoke("hung up");
+        CallEnded?.Invoke("Hung up.");
     }
 
     public async Task DisconnectAsync()
@@ -147,23 +184,49 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
             await _signaling.DisconnectAsync();
             _signaling = null;
         }
+
+        _activeCallId = Guid.Empty;
+        _incomingCallId = Guid.Empty;
     }
 
     private void StartMedia()
     {
+        int width = _captureWidth;
+        int height = _captureHeight;
+        int fps = _captureFps;
+
+        if (_source == SourceKind.VideoFile)
+        {
+            var probe = FileVideoSource.Probe(_videoFilePath);
+
+            if (probe is null)
+            {
+                CameraError?.Invoke($"Cannot open video file: {_videoFilePath}");
+                _ = AbortCallAsync("video file error");
+                return;
+            }
+
+            (width, height, fps) = probe.Value;
+            _camera = new FileVideoSource(_videoFilePath);
+        }
+        else
+        {
+            _camera = _source == SourceKind.Synthetic ? new SyntheticCamera() : new OpenCvCamera();
+        }
+
         _encoder = _codec == VideoCodec.H264
-            ? new H264VideoEncoder(_captureWidth, _captureHeight, _captureFps)
+            ? new H264VideoEncoder(width, height, fps)
             : new JpegVideoEncoder();
 
         _lossyTransport = new LossyTransportDecorator(new UdpMediaTransport(), _lossPercent);
         _mediaSession = new MediaSession(_lossyTransport, _remoteEndpoint!, new Sink(this));
         _mediaSession.KeyframeRequested += () => _encoder?.ForceKeyframe();
+        _mediaSession.SendError += ex => SendError?.Invoke(ex);
         _mediaSession.Start(_localUdpPort);
 
-        _camera = _source == SourceKind.Synthetic ? new SyntheticCamera() : new OpenCvCamera();
         _camera.FrameCaptured += OnFrame;
-        _camera.Failed += OnCameraFailed;
-        _camera.Start(_captureWidth, _captureHeight, _captureFps);
+        _camera.Failed += reason => CameraError?.Invoke(reason);
+        _camera.Start(width, height, fps);
 
         _audioCapture = new AudioCapture();
         _audioCapture.ChunkCaptured += chunk => _mediaSession?.SendFrame(chunk, FrameType.Audio, VideoCodec.Pcm16);
@@ -172,6 +235,10 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
         _audioPlayer = new AudioPlayer();
         _audioPlayer.Start();
 
+        SentFrames = 0;
+        ReceivedFrames = 0;
+        EmptyEncodes = 0;
+
         CallEstablished?.Invoke();
     }
 
@@ -179,8 +246,6 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
     {
         if (_camera is not null)
         {
-            _camera.FrameCaptured -= OnFrame;
-            _camera.Failed -= OnCameraFailed;
             _camera.Dispose();
             _camera = null;
         }
@@ -197,6 +262,20 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
         _remoteEndpoint = null;
     }
 
+    private async Task AbortCallAsync(string reason)
+    {
+        StopMedia();
+
+        if (_signaling is not null && _activeCallId != Guid.Empty)
+        {
+            await _signaling.HangupAsync(_activeCallId);
+        }
+
+        _activeCallId = Guid.Empty;
+        _incomingCallId = Guid.Empty;
+        CallEnded?.Invoke(reason);
+    }
+
     private void OnFrame(VideoFrame frame)
     {
         if (_encoder is null)
@@ -204,22 +283,16 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
             return;
         }
 
-        (byte[] data, FrameType type) = _encoder.Encode(frame);
-        _mediaSession?.SendFrame(data, type, _codec);
-        OnLocalFrame?.Invoke(frame);
-    }
+        (byte[] data, FrameType frameType) = _encoder.Encode(frame);
 
-    private event Action<VideoFrame>? OnLocalFrame;
+        if (data.Length == 0)
+        {
+            EmptyEncodes++;
+        }
 
-    public event Action<VideoFrame>? LocalVideoFrame
-    {
-        add => OnLocalFrame += value;
-        remove => OnLocalFrame -= value;
-    }
-
-    private void OnCameraFailed(string reason)
-    {
-        CallEnded?.Invoke($"camera error: {reason}");
+        SentFrames++;
+        _mediaSession?.SendFrame(data, frameType, _codec);
+        LocalVideoFrame?.Invoke(frame);
     }
 
     public void OnDisconnected()
@@ -236,6 +309,7 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
 
     public void OnCallRequestAck(CallRequestAckMessage message)
     {
+        Ringing?.Invoke();
     }
 
     public void OnIncomingCall(IncomingCallMessage message)
@@ -255,18 +329,24 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
     public void OnCallRejected(CallRejectMessage message)
     {
         _activeCallId = Guid.Empty;
-        CallEnded?.Invoke($"rejected: {message.Reason}");
+        CallRejected?.Invoke(message.Reason);
     }
 
     public void OnCallHangup(HangupMessage message)
     {
         StopMedia();
         _activeCallId = Guid.Empty;
-        CallEnded?.Invoke("remote hung up");
+        CallEnded?.Invoke("Remote side hung up.");
     }
 
     public void OnKeepAlive()
     {
+    }
+
+    private void OnRemoteFrame(VideoFrame frame)
+    {
+        ReceivedFrames++;
+        RemoteVideoFrame?.Invoke(frame);
     }
 
     private sealed class Sink : IFrameSink
@@ -285,7 +365,6 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
                 if (frameType == FrameType.Audio)
                 {
                     _owner._audioPlayer?.Play(data.ToArray());
-                    _owner.RemoteAudioChunk?.Invoke(data.ToArray());
                     return;
                 }
 
@@ -297,11 +376,12 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
 
                 if (frame is not null)
                 {
-                    _owner.RemoteVideoFrame?.Invoke(frame);
+                    _owner.OnRemoteFrame(frame);
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                _owner.DecodeError?.Invoke(ex);
             }
         }
     }
@@ -311,10 +391,6 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
         StopMedia();
         _h264Decoder?.Dispose();
         _jpegDecoder.Dispose();
-
-        if (_signaling is not null)
-        {
-            _signaling.DisconnectAsync().GetAwaiter().GetResult();
-        }
+        DisconnectAsync().GetAwaiter().GetResult();
     }
 }

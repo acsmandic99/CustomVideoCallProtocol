@@ -11,6 +11,8 @@ public sealed class UdpMediaTransport : IUdpMediaTransport
 
     public event DatagramReceivedHandler? DatagramReceived;
 
+    public int RawReceivedCount { get; private set; }
+
     public void Bind(ushort localPort)
     {
         _cts = new CancellationTokenSource();
@@ -55,6 +57,7 @@ public sealed class UdpMediaTransport : IUdpMediaTransport
                 continue;
             }
 
+            RawReceivedCount++;
             DatagramReceived?.Invoke(result.Buffer, result.RemoteEndPoint);
         }
     }
