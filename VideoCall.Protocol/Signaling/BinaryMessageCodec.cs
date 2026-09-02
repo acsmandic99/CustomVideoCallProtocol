@@ -32,6 +32,11 @@ public sealed class BinaryMessageCodec : IMessageCodec
 
     public ISignalingMessage Decode(MessageType messageType, ReadOnlySpan<byte> payload)
     {
+        if (messageType is MessageType.MediaFrame or MessageType.KeyframeRequest)
+        {
+            throw new NotSupportedException($"Message type {messageType} is not a signaling message.");
+        }
+
         var message = _factory.Create(messageType);
 
         return messageType switch
@@ -52,15 +57,31 @@ public sealed class BinaryMessageCodec : IMessageCodec
     private static void WriteString(Span<byte> buffer, ref int offset, string value)
     {
         var bytes = Encoding.UTF8.GetBytes(value);
+
+        if (bytes.Length > ushort.MaxValue)
+        {
+            throw new ArgumentException("String exceeds the 65535-byte UTF-8 limit of the wire format.", nameof(value));
+        }
+
         BinaryPrimitives.WriteUInt16BigEndian(buffer.Slice(offset, 2), (ushort)bytes.Length);
         offset += 2;
         bytes.CopyTo(buffer.Slice(offset));
         offset += bytes.Length;
     }
 
+    private static void EnsureRemaining(ReadOnlySpan<byte> buffer, int offset, int count)
+    {
+        if (offset < 0 || count < 0 || buffer.Length - offset < count)
+        {
+            throw new InvalidOperationException("Malformed message: payload is shorter than the wire format requires.");
+        }
+    }
+
     private static string ReadString(ReadOnlySpan<byte> buffer, ref int offset)
     {
+        EnsureRemaining(buffer, offset, 2);
         ushort length = BinaryPrimitives.ReadUInt16BigEndian(buffer.Slice(offset, 2));
+        EnsureRemaining(buffer, offset + 2, length);
         offset += 2;
         string value = Encoding.UTF8.GetString(buffer.Slice(offset, length));
         offset += length;
@@ -75,6 +96,7 @@ public sealed class BinaryMessageCodec : IMessageCodec
 
     private static uint ReadUInt32(ReadOnlySpan<byte> buffer, ref int offset)
     {
+        EnsureRemaining(buffer, offset, 4);
         uint value = BinaryPrimitives.ReadUInt32BigEndian(buffer.Slice(offset, 4));
         offset += 4;
         return value;
@@ -88,6 +110,7 @@ public sealed class BinaryMessageCodec : IMessageCodec
 
     private static ushort ReadUInt16(ReadOnlySpan<byte> buffer, ref int offset)
     {
+        EnsureRemaining(buffer, offset, 2);
         ushort value = BinaryPrimitives.ReadUInt16BigEndian(buffer.Slice(offset, 2));
         offset += 2;
         return value;
@@ -101,6 +124,7 @@ public sealed class BinaryMessageCodec : IMessageCodec
 
     private static bool ReadBool(ReadOnlySpan<byte> buffer, ref int offset)
     {
+        EnsureRemaining(buffer, offset, 1);
         bool value = buffer[offset] != 0;
         offset += 1;
         return value;
@@ -108,15 +132,27 @@ public sealed class BinaryMessageCodec : IMessageCodec
 
     private static void WriteGuid(Span<byte> buffer, ref int offset, Guid value)
     {
-        value.TryWriteBytes(buffer.Slice(offset, 16));
+        if (!value.TryWriteBytes(buffer.Slice(offset, 16)))
+        {
+            throw new InvalidOperationException("Failed to encode a GUID.");
+        }
         offset += 16;
     }
 
     private static Guid ReadGuid(ReadOnlySpan<byte> buffer, ref int offset)
     {
+        EnsureRemaining(buffer, offset, 16);
         Guid value = new Guid(buffer.Slice(offset, 16));
         offset += 16;
         return value;
+    }
+
+    private static void EnsureConsumed(ReadOnlySpan<byte> buffer, int offset)
+    {
+        if (offset != buffer.Length)
+        {
+            throw new InvalidOperationException("Malformed message: payload has trailing bytes.");
+        }
     }
 
     private static int StringSize(string value)
@@ -137,6 +173,7 @@ public sealed class BinaryMessageCodec : IMessageCodec
     {
         int offset = 0;
         m.UserId = ReadString(payload, ref offset);
+        EnsureConsumed(payload, offset);
         return m;
     }
 
@@ -157,6 +194,7 @@ public sealed class BinaryMessageCodec : IMessageCodec
         m.Success = ReadBool(payload, ref offset);
         m.UserId = ReadString(payload, ref offset);
         m.Reason = ReadString(payload, ref offset);
+        EnsureConsumed(payload, offset);
         return m;
     }
 
@@ -177,6 +215,7 @@ public sealed class BinaryMessageCodec : IMessageCodec
         m.CalleeId = ReadString(payload, ref offset);
         m.Ip = ReadString(payload, ref offset);
         m.Port = ReadUInt16(payload, ref offset);
+        EnsureConsumed(payload, offset);
         return m;
     }
 
@@ -195,6 +234,7 @@ public sealed class BinaryMessageCodec : IMessageCodec
         int offset = 0;
         m.CallId = ReadGuid(payload, ref offset);
         m.CalleeId = ReadString(payload, ref offset);
+        EnsureConsumed(payload, offset);
         return m;
     }
 
@@ -217,6 +257,7 @@ public sealed class BinaryMessageCodec : IMessageCodec
         m.CallerId = ReadString(payload, ref offset);
         m.Ip = ReadString(payload, ref offset);
         m.Port = ReadUInt16(payload, ref offset);
+        EnsureConsumed(payload, offset);
         return m;
     }
 
@@ -237,6 +278,7 @@ public sealed class BinaryMessageCodec : IMessageCodec
         m.CallId = ReadGuid(payload, ref offset);
         m.Ip = ReadString(payload, ref offset);
         m.Port = ReadUInt16(payload, ref offset);
+        EnsureConsumed(payload, offset);
         return m;
     }
 
@@ -255,6 +297,7 @@ public sealed class BinaryMessageCodec : IMessageCodec
         int offset = 0;
         m.CallId = ReadGuid(payload, ref offset);
         m.Reason = ReadString(payload, ref offset);
+        EnsureConsumed(payload, offset);
         return m;
     }
 
@@ -270,6 +313,7 @@ public sealed class BinaryMessageCodec : IMessageCodec
     {
         int offset = 0;
         m.CallId = ReadGuid(payload, ref offset);
+        EnsureConsumed(payload, offset);
         return m;
     }
 }

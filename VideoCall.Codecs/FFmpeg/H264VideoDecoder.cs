@@ -24,7 +24,7 @@ public sealed class H264VideoDecoder : IVideoDecoder
         _packet = new Packet();
     }
 
-    public VideoFrame? Decode(byte[] data, FrameType frameType)
+    public VideoFrame? Decode(byte[] data)
     {
         if (_disposed)
         {
@@ -37,41 +37,53 @@ public sealed class H264VideoDecoder : IVideoDecoder
             _packet.Data = new DataPointer(handle.AddrOfPinnedObject(), data.Length);
             _context.SendPacket(_packet);
         }
+        catch (FFmpegException)
+        {
+            return null;
+        }
         finally
         {
             handle.Free();
         }
 
-        if (_context.ReceiveFrame(_frame) != CodecResult.Success)
+        // one packet can yield more than one frame; keep the last decodable one
+        VideoFrame? result = null;
+
+        while (_context.ReceiveFrame(_frame) == CodecResult.Success)
         {
-            return null;
+            try
+            {
+                if ((AVPixelFormat)_frame.Format == AVPixelFormat.Yuv420p)
+                {
+                    result = ConvertToBgr(_frame.Width, _frame.Height);
+                }
+            }
+            finally
+            {
+                _frame.Unref();
+            }
         }
 
-        try
-        {
-            int width = _frame.Width;
-            int height = _frame.Height;
+        return result;
+    }
 
-            using var i420 = new Mat(height * 3 / 2, width, MatType.CV_8UC1);
-            long ySize = (long)width * height;
-            long uSize = ySize / 4;
+    private unsafe VideoFrame ConvertToBgr(int width, int height)
+    {
+        using var i420 = new Mat(height * 3 / 2, width, MatType.CV_8UC1);
+        long ySize = (long)width * height;
+        long uSize = ySize / 4;
 
-            CopyPlane(_frame.Data[0], _frame.Linesize[0], i420.Data, width, height, width);
-            CopyPlane(_frame.Data[1], _frame.Linesize[1], (nint)(i420.Data + ySize), width / 2, height / 2, width / 2);
-            CopyPlane(_frame.Data[2], _frame.Linesize[2], (nint)(i420.Data + ySize + uSize), width / 2, height / 2, width / 2);
+        CopyPlane(_frame.Data[0], _frame.Linesize[0], i420.Data, width, height, width);
+        CopyPlane(_frame.Data[1], _frame.Linesize[1], (nint)(i420.Data + ySize), width / 2, height / 2, width / 2);
+        CopyPlane(_frame.Data[2], _frame.Linesize[2], (nint)(i420.Data + ySize + uSize), width / 2, height / 2, width / 2);
 
-            using var bgr = new Mat();
-            Cv2.CvtColor(i420, bgr, ColorConversionCodes.YUV2BGR_I420);
+        using var bgr = new Mat();
+        Cv2.CvtColor(i420, bgr, ColorConversionCodes.YUV2BGR_I420);
 
-            var bgrData = new byte[bgr.Rows * bgr.Cols * bgr.ElemSize()];
-            Marshal.Copy(bgr.Data, bgrData, 0, bgrData.Length);
+        var bgrData = new byte[bgr.Rows * bgr.Cols * bgr.ElemSize()];
+        Marshal.Copy(bgr.Data, bgrData, 0, bgrData.Length);
 
-            return new VideoFrame(bgrData, width, height);
-        }
-        finally
-        {
-            _frame.Unref();
-        }
+        return new VideoFrame(bgrData, width, height);
     }
 
     private static unsafe void CopyPlane(IntPtr source, int sourceStride, IntPtr destination, int destinationStride, int rows, int cols)

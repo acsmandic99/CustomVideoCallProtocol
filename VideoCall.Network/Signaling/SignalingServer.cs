@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
@@ -34,6 +35,8 @@ public sealed class SignalingServer : IDisposable
     private readonly IMessageCodec _codec;
     private readonly ILogger<SignalingServer> _logger;
     private readonly TimeSpan _ringingTimeout;
+    private static readonly TimeSpan IdleTimeout = TimeSpan.FromSeconds(90);
+    private readonly object _sync = new();
 
     private readonly ConcurrentDictionary<string, ClientConnection> _clients = new();
     private readonly ConcurrentDictionary<Guid, CallEntry> _calls = new();
@@ -75,14 +78,25 @@ public sealed class SignalingServer : IDisposable
 
         if (_acceptTask is not null)
         {
-            await Task.WhenAny(_acceptTask, Task.Delay(TimeSpan.FromSeconds(5)));
+            await WaitAsync(_acceptTask);
         }
         if (_sweepTask is not null)
         {
-            await Task.WhenAny(_sweepTask, Task.Delay(TimeSpan.FromSeconds(5)));
+            await WaitAsync(_sweepTask);
         }
 
         _logger.LogInformation("Signaling server stopped");
+    }
+
+    private static async Task WaitAsync(Task task)
+    {
+        try
+        {
+            await task.WaitAsync(TimeSpan.FromSeconds(5));
+        }
+        catch (TimeoutException)
+        {
+        }
     }
 
     private async Task AcceptClientsAsync(CancellationToken cancellationToken)
@@ -119,7 +133,19 @@ public sealed class SignalingServer : IDisposable
                 {
                     if (pair.Value.State == CallState.Ringing && DateTime.UtcNow - pair.Value.StartedAt > _ringingTimeout)
                     {
-                        ExpireCall(pair.Key);
+                        lock (_sync)
+                        {
+                            ExpireCall(pair.Key);
+                        }
+                    }
+                }
+
+                foreach (var pair in _clients)
+                {
+                    if (Stopwatch.GetElapsedTime(pair.Value.LastReceivedTicks) > IdleTimeout)
+                    {
+                        _logger.LogInformation("Client {UserId} dropped: no traffic for {Seconds}s", pair.Key, IdleTimeout.TotalSeconds);
+                        pair.Value.Close();
                     }
                 }
             }
@@ -151,7 +177,7 @@ public sealed class SignalingServer : IDisposable
 
         if (_clients.TryGetValue(call.CalleeId, out ClientConnection? callee))
         {
-            ForwardTo(callee, new HangupMessage(callId));
+            ForwardTo(callee, new CallRejectMessage(callId, "no answer"));
         }
     }
 
@@ -186,13 +212,17 @@ public sealed class SignalingServer : IDisposable
                     break;
                 }
 
+                connection.LastReceivedTicks = Stopwatch.GetTimestamp();
                 connection.FramingReader.Append(receiveBuffer.AsSpan(0, read));
 
                 while (connection.FramingReader.TryRead(out Packet? packet))
                 {
                     if (packet is not null)
                     {
-                        HandlePacket(connection, packet);
+                        lock (_sync)
+                        {
+                            HandlePacket(connection, packet);
+                        }
                     }
                 }
             }
@@ -282,13 +312,21 @@ public sealed class SignalingServer : IDisposable
 
     private void HandleCallRequest(ClientConnection sender, CallRequestMessage message)
     {
+        if (sender.UserId is null)
+        {
+            _logger.LogWarning("CallRequest rejected: connection is not registered");
+            ForwardTo(sender, new CallRejectMessage(Guid.NewGuid(), "not registered"));
+            return;
+        }
+
         Guid callId = Guid.NewGuid();
-        string callerId = sender.UserId ?? string.Empty;
+        string callerId = sender.UserId;
 
         var ack = new CallRequestAckMessage(callId, message.CalleeId);
         ForwardTo(sender, ack);
 
         string? rejectReason = null;
+        ClientConnection? callee = null;
 
         if (message.CalleeId == callerId)
         {
@@ -298,7 +336,7 @@ public sealed class SignalingServer : IDisposable
         {
             rejectReason = "busy";
         }
-        else if (!_clients.TryGetValue(message.CalleeId, out ClientConnection? _))
+        else if (!_clients.TryGetValue(message.CalleeId, out callee))
         {
             rejectReason = "User not found";
         }
@@ -316,8 +354,7 @@ public sealed class SignalingServer : IDisposable
 
         _calls[callId] = new CallEntry(callerId, message.CalleeId);
 
-        var callee = _clients[message.CalleeId];
-        ForwardTo(callee, new IncomingCallMessage(callId, callerId, message.Ip, message.Port));
+        ForwardTo(callee!, new IncomingCallMessage(callId, callerId, message.Ip, message.Port));
         _logger.LogInformation("Call {CallId} routed from {CallerId} to {CalleeId}", callId, callerId, message.CalleeId);
     }
 
@@ -328,7 +365,7 @@ public sealed class SignalingServer : IDisposable
             if (sender.UserId != call.CalleeId)
             {
                 _logger.LogWarning("Call {CallId} accept from non-callee {UserId}", message.CallId, sender.UserId);
-                ForwardTo(sender, new CallRejectMessage(message.CallId, "call not found"));
+                ForwardTo(sender, new CallRejectMessage(message.CallId, "only the callee can accept"));
                 return;
             }
 
@@ -345,7 +382,7 @@ public sealed class SignalingServer : IDisposable
             else
             {
                 _logger.LogWarning("Call {CallId} already accepted", message.CallId);
-                ForwardTo(sender, new CallRejectMessage(message.CallId, "call not found"));
+                ForwardTo(sender, new CallRejectMessage(message.CallId, "call already accepted"));
             }
         }
         else
@@ -422,7 +459,7 @@ public sealed class SignalingServer : IDisposable
 
         try
         {
-            target.GetStream().Write(bytes);
+            target.Send(bytes);
         }
         catch (Exception ex)
         {

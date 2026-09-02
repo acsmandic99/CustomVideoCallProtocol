@@ -9,6 +9,8 @@ namespace VideoCall.Network.Signaling;
 
 public sealed class SignalingClient : IDisposable
 {
+    private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(15);
+
     private readonly IMessageCodec _codec;
     private readonly ISignalingListener _listener;
     private readonly ILogger<SignalingClient> _logger;
@@ -20,11 +22,12 @@ public sealed class SignalingClient : IDisposable
     private TcpFramingReader _framingReader = new();
     private CancellationTokenSource _cts = new();
     private Task? _receiveTask;
+    private volatile bool _connected;
 
     private TaskCompletionSource<bool>? _registerTcs;
     private TaskCompletionSource<Guid>? _callRequestTcs;
 
-    public bool IsConnected => _tcpClient?.Connected ?? false;
+    public bool IsConnected => _connected;
     public string? LocalIp { get; private set; }
 
     public SignalingClient(IMessageCodec codec, ISignalingListener listener, ILogger<SignalingClient> logger)
@@ -36,6 +39,7 @@ public sealed class SignalingClient : IDisposable
 
     public async Task ConnectAsync(string host, int port, CancellationToken cancellationToken = default)
     {
+        _cts.Dispose();
         _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _tcpClient = new TcpClient();
         await _tcpClient.ConnectAsync(host, port, cancellationToken);
@@ -44,6 +48,7 @@ public sealed class SignalingClient : IDisposable
         LocalIp = ResolveUsableLocalIp(localAddr, host);
         _stream = _tcpClient.GetStream();
         _framingReader = new TcpFramingReader();
+        _connected = true;
         _receiveTask = ReceiveLoopAsync(_cts.Token);
         _logger.LogInformation("Connected to {Host}:{Port}", host, port);
     }
@@ -98,16 +103,19 @@ public sealed class SignalingClient : IDisposable
     public async Task DisconnectAsync()
     {
         _cts.Cancel();
+        _connected = false;
 
         if (_stream is not null)
         {
             await _stream.DisposeAsync();
+            _stream = null;
         }
+
         _tcpClient?.Close();
 
         if (_receiveTask is not null)
         {
-            await Task.WhenAny(_receiveTask, Task.Delay(TimeSpan.FromSeconds(5)));
+            await WaitAsync(_receiveTask, TimeSpan.FromSeconds(5));
         }
 
         _logger.LogInformation("Disconnected");
@@ -115,24 +123,26 @@ public sealed class SignalingClient : IDisposable
 
     public async Task<bool> RegisterAsync(string userId)
     {
+        _registerTcs?.TrySetException(new InvalidOperationException("Superseded by a newer registration request."));
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         _registerTcs = tcs;
 
         var message = new RegisterMessage(userId);
         await SendAsync(message);
 
-        return await tcs.Task;
+        return await WaitAsync(tcs.Task, RequestTimeout, "Registration");
     }
 
     public async Task<Guid> CallAsync(string calleeId, string ip, ushort port)
     {
+        _callRequestTcs?.TrySetException(new InvalidOperationException("Superseded by a newer call request."));
         var tcs = new TaskCompletionSource<Guid>(TaskCreationOptions.RunContinuationsAsynchronously);
         _callRequestTcs = tcs;
 
         var message = new CallRequestMessage(calleeId, ip, port);
         await SendAsync(message);
 
-        return await tcs.Task;
+        return await WaitAsync(tcs.Task, RequestTimeout, "Call request");
     }
 
     public async Task AcceptCallAsync(Guid callId, string ip, ushort port)
@@ -159,6 +169,29 @@ public sealed class SignalingClient : IDisposable
         await SendAsync(message);
     }
 
+    private static async Task<T> WaitAsync<T>(Task<T> task, TimeSpan timeout, string operationName)
+    {
+        Task completed = await Task.WhenAny(task, Task.Delay(timeout));
+
+        if (completed != task)
+        {
+            throw new TimeoutException($"{operationName} timed out after {timeout.TotalSeconds:F0}s without a server reply.");
+        }
+
+        return await task;
+    }
+
+    private static async Task WaitAsync(Task task, TimeSpan timeout)
+    {
+        try
+        {
+            await task.WaitAsync(timeout);
+        }
+        catch (TimeoutException)
+        {
+        }
+    }
+
     private async Task SendAsync(ISignalingMessage message)
     {
         if (_stream is null)
@@ -167,7 +200,7 @@ public sealed class SignalingClient : IDisposable
         }
 
         byte[] payload = _codec.Encode(message);
-        var packet = new Packet(message.MessageType, payload, frameType: FrameType.Audio);
+        var packet = new Packet(message.MessageType, payload);
         byte[] bytes = PacketWriter.Serialize(packet);
 
         await _sendLock.WaitAsync();
@@ -221,6 +254,7 @@ public sealed class SignalingClient : IDisposable
         }
         finally
         {
+            _connected = false;
             _listener.OnDisconnected();
             CompletePendingRequests();
         }
@@ -239,36 +273,43 @@ public sealed class SignalingClient : IDisposable
             return;
         }
 
-        switch (message)
+        try
         {
-            case RegisterAckMessage m:
-                _registerTcs?.TrySetResult(m.Success);
-                _registerTcs = null;
-                _listener.OnRegisterAck(m);
-                break;
-            case CallRequestAckMessage m:
-                _callRequestTcs?.TrySetResult(m.CallId);
-                _callRequestTcs = null;
-                _listener.OnCallRequestAck(m);
-                break;
-            case IncomingCallMessage m:
-                _listener.OnIncomingCall(m);
-                break;
-            case CallAcceptMessage m:
-                _listener.OnCallAccepted(m);
-                break;
-            case CallRejectMessage m:
-                _listener.OnCallRejected(m);
-                break;
-            case HangupMessage m:
-                _listener.OnCallHangup(m);
-                break;
-            case KeepAliveMessage:
-                _listener.OnKeepAlive();
-                break;
-            default:
-                _logger.LogWarning("Unknown message type {MessageType}", packet.MessageType);
-                break;
+            switch (message)
+            {
+                case RegisterAckMessage m:
+                    _registerTcs?.TrySetResult(m.Success);
+                    _registerTcs = null;
+                    _listener.OnRegisterAck(m);
+                    break;
+                case CallRequestAckMessage m:
+                    _callRequestTcs?.TrySetResult(m.CallId);
+                    _callRequestTcs = null;
+                    _listener.OnCallRequestAck(m);
+                    break;
+                case IncomingCallMessage m:
+                    _listener.OnIncomingCall(m);
+                    break;
+                case CallAcceptMessage m:
+                    _listener.OnCallAccepted(m);
+                    break;
+                case CallRejectMessage m:
+                    _listener.OnCallRejected(m);
+                    break;
+                case HangupMessage m:
+                    _listener.OnCallHangup(m);
+                    break;
+                case KeepAliveMessage:
+                    _listener.OnKeepAlive();
+                    break;
+                default:
+                    _logger.LogWarning("Unknown message type {MessageType}", packet.MessageType);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Signaling listener failed handling message {MessageType}", packet.MessageType);
         }
     }
 
@@ -282,6 +323,11 @@ public sealed class SignalingClient : IDisposable
 
     public void Dispose()
     {
+        if (!_receiveTask?.IsCompleted ?? false)
+        {
+            _cts.Cancel();
+        }
+
         _cts.Dispose();
         _sendLock.Dispose();
         _tcpClient?.Dispose();

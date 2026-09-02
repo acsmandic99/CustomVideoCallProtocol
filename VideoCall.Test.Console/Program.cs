@@ -39,10 +39,10 @@ public static class Program
         System.Console.WriteLine("  Bob connected to server\n");
 
         System.Console.WriteLine("--- Step 2: Register ---");
-        aliceListener.PrintSent($"Register: userId=Alice");
+        aliceListener.PrintSent("Register: userId=Alice");
         bool aliceRegistered = await alice.RegisterAsync("Alice");
 
-        bobListener.PrintSent($"Register: userId=Bob");
+        bobListener.PrintSent("Register: userId=Bob");
         bool bobRegistered = await bob.RegisterAsync("Bob");
 
         System.Console.WriteLine($"  Result: Alice registered={aliceRegistered}, Bob registered={bobRegistered}\n");
@@ -50,9 +50,18 @@ public static class Program
         await Task.Delay(500);
 
         System.Console.WriteLine("--- Step 3: Alice calls Bob ---");
-        aliceListener.PrintSent($"CallRequest: callee=Bob, udp=127.0.0.1:6000");
+        aliceListener.PrintSent("CallRequest: callee=Bob, udp=127.0.0.1:6000");
         Guid callId = await alice.CallAsync("Bob", "127.0.0.1", 6000);
         System.Console.WriteLine($"  Result: Alice got callId={callId}\n");
+
+        if (!aliceRegistered || !bobRegistered || callId == Guid.Empty)
+        {
+            System.Console.WriteLine("  Registration or call routing failed; aborting remaining steps.");
+            await alice.DisconnectAsync();
+            await bob.DisconnectAsync();
+            await server.StopAsync();
+            return;
+        }
 
         await Task.Delay(500);
 

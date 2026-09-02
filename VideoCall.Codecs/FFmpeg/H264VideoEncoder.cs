@@ -21,13 +21,14 @@ public sealed class H264VideoEncoder : IVideoEncoder
     private readonly int _width;
     private readonly int _height;
     private long _pts;
-    private bool _forceKeyframe;
+    private volatile bool _forceKeyframe;
     private bool _disposed;
 
     public H264VideoEncoder(int width, int height, int fps = 30)
     {
-        _width = width;
-        _height = height;
+        // YUV420 requires even dimensions; odd inputs are rounded down
+        _width = Math.Max(2, width & ~1);
+        _height = Math.Max(2, height & ~1);
 
         Codec codec = Codec.CommonEncoders.Libx264;
         _context = new CodecContext(codec)
@@ -70,9 +71,28 @@ public sealed class H264VideoEncoder : IVideoEncoder
             throw new ObjectDisposedException(nameof(H264VideoEncoder));
         }
 
-        using var bgr = new Mat(frame.Height, frame.Width, MatType.CV_8UC3);
-        Marshal.Copy(frame.Bgr24Data, 0, bgr.Data, frame.Bgr24Data.Length);
-        Cv2.CvtColor(bgr, _i420, ColorConversionCodes.BGR2YUV_I420);
+        int sourceLength = frame.Width * frame.Height * 3;
+
+        if (frame.Bgr24Data.Length < sourceLength)
+        {
+            throw new ArgumentException($"Frame buffer is {frame.Bgr24Data.Length} bytes, expected {sourceLength} for {frame.Width}x{frame.Height} BGR24.");
+        }
+
+        using (var bgr = new Mat(frame.Height, frame.Width, MatType.CV_8UC3))
+        {
+            Marshal.Copy(frame.Bgr24Data, 0, bgr.Data, sourceLength);
+
+            if (frame.Width != _width || frame.Height != _height)
+            {
+                using var resized = new Mat();
+                Cv2.Resize(bgr, resized, new OpenCvSharp.Size(_width, _height));
+                Cv2.CvtColor(resized, _i420, ColorConversionCodes.BGR2YUV_I420);
+            }
+            else
+            {
+                Cv2.CvtColor(bgr, _i420, ColorConversionCodes.BGR2YUV_I420);
+            }
+        }
 
         long ySize = (long)_width * _height;
         long uSize = ySize / 4;
@@ -86,11 +106,10 @@ public sealed class H264VideoEncoder : IVideoEncoder
         _frame.Linesize[2] = _width / 2;
         _frame.Pts = _pts++;
 
-        if (_forceKeyframe)
-        {
-            _forceKeyframe = false;
-            _frame.KeyFrame = 1;
-        }
+        // the Frame object is reused: the flag must be re-evaluated every call,
+        // otherwise every frame after the first PLI would be encoded as IDR
+        _frame.KeyFrame = _forceKeyframe ? 1 : 0;
+        _forceKeyframe = false;
 
         _context.SendFrame(_frame);
 

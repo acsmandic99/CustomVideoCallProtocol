@@ -13,6 +13,11 @@ public sealed class SyntheticCamera : ICamera
 
     public void Start(int width, int height, int fps)
     {
+        if (_cts is not null)
+        {
+            return;
+        }
+
         _cts = new CancellationTokenSource();
         _loopTask = Task.Run(() => Loop(width, height, fps, _cts.Token));
     }

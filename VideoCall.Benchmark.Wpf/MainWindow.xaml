@@ -1,0 +1,113 @@
+<Window x:Class="VideoCall.Benchmark.Wpf.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="CustomVideoCall — Benchmark"
+        Height="720" Width="1120" MinHeight="600" MinWidth="940"
+        WindowStartupLocation="CenterScreen"
+        FontFamily="Segoe UI"
+        Background="{StaticResource Brush.WindowBackground}">
+    <DockPanel>
+        <!-- Sidebar: run configuration -->
+        <Border DockPanel.Dock="Left" Width="320" Background="{StaticResource Brush.CardBackground}"
+                BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,0,1,0">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="20,18,20,16">
+                    <StackPanel Orientation="Horizontal">
+                        <Border Width="32" Height="32" CornerRadius="8" Background="{StaticResource Brush.Accent}">
+                            <TextBlock Text="&#xE9D9;" FontFamily="Segoe MDL2 Assets" FontSize="15"
+                                       Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <TextBlock Text="Benchmark" FontSize="14" FontWeight="SemiBold"
+                                   Foreground="{StaticResource Brush.TextPrimary}"
+                                   VerticalAlignment="Center" Margin="10,0,0,0"/>
+                    </StackPanel>
+
+                    <TextBlock Text="Test name" Style="{StaticResource Text.Caption}" Margin="0,20,0,6"/>
+                    <TextBox x:Name="TestNameBox" Text="h264-custom-udp"/>
+
+                    <TextBlock Text="Video file (identical input for every run)" Style="{StaticResource Text.Caption}" Margin="0,14,0,6"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox x:Name="VideoFileBox"/>
+                        <Button Grid.Column="1" Content="Browse…" Margin="8,0,0,0" Padding="12,8" Click="BrowseButton_Click"/>
+                    </Grid>
+
+                    <TextBlock Text="Duration (seconds)" Style="{StaticResource Text.Caption}" Margin="0,14,0,6"/>
+                    <TextBox x:Name="DurationBox" Text="30"/>
+
+                    <TextBlock Text="Transport" Style="{StaticResource Text.Caption}" Margin="0,14,0,6"/>
+                    <ComboBox x:Name="TransportCombo" SelectedIndex="0" Height="36">
+                        <ComboBoxItem Content="Custom UDP (NACK + PLI)"/>
+                        <ComboBoxItem Content="Raw UDP (no recovery)"/>
+                        <ComboBoxItem Content="TCP (baseline)"/>
+                    </ComboBox>
+
+                    <TextBlock Text="Codec" Style="{StaticResource Text.Caption}" Margin="0,14,0,6"/>
+                    <ComboBox x:Name="CodecCombo" SelectedIndex="0" Height="36">
+                        <ComboBoxItem Content="H.264"/>
+                        <ComboBoxItem Content="JPEG"/>
+                    </ComboBox>
+
+                    <TextBlock Text="Outgoing loss %" Style="{StaticResource Text.Caption}" Margin="0,14,0,6"/>
+                    <TextBox x:Name="LossBox" Text="5"/>
+
+                    <CheckBox x:Name="SweepCheck" Margin="0,16,0,0" VerticalContentAlignment="Center">
+                        <StackPanel>
+                            <TextBlock Text="Loss sweep 0–10 % (step 1)" FontWeight="SemiBold" FontSize="12"/>
+                            <TextBlock Text="Runs 11 tests and ignores the loss field; each run ≈ duration + ~3 s."
+                                       Style="{StaticResource Text.Caption}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </CheckBox>
+
+                    <Button x:Name="RunButton" Style="{StaticResource Button.Primary}" Content="Run benchmark"
+                            Height="42" Margin="0,20,0,0" FontSize="14" Click="RunButton_Click"/>
+                    <Button x:Name="StopButton" Content="Stop" Height="36" Margin="0,8,0,0"
+                            IsEnabled="False" Click="StopButton_Click"/>
+
+                    <TextBlock x:Name="StatusText" Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                               Margin="0,12,0,0" Text="Results are written to BenchmarkResults/&lt;test-name&gt;-&lt;timestamp&gt;."/>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Main area: summary + log -->
+        <Grid Margin="16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="220"/>
+            </Grid.RowDefinitions>
+
+            <Grid>
+                <TextBlock Text="Summary" Style="{StaticResource Text.H2}" VerticalAlignment="Center"/>
+                <Button x:Name="OpenFolderButton" Content="Open results folder" HorizontalAlignment="Right"
+                        Padding="12,7" IsEnabled="False" Click="OpenFolderButton_Click"/>
+            </Grid>
+
+            <ListView x:Name="SummaryList" Grid.Row="1" Margin="0,10,0,10" BorderBrush="{StaticResource Brush.Border}">
+                <ListView.View>
+                    <GridView>
+                        <GridViewColumn Header="Metric" Width="220" DisplayMemberBinding="{Binding Metric}"/>
+                        <GridViewColumn Header="Value" Width="260" DisplayMemberBinding="{Binding Value}"/>
+                    </GridView>
+                </ListView.View>
+            </ListView>
+
+            <TextBlock Grid.Row="2" Text="Log" Style="{StaticResource Text.H2}"/>
+            <Border Grid.Row="3" Background="{StaticResource Brush.CardBackground}" BorderBrush="{StaticResource Brush.Border}"
+                    BorderThickness="1" CornerRadius="8" Padding="12">
+                <ScrollViewer x:Name="LogScroll" VerticalScrollBarVisibility="Auto">
+                    <TextBlock x:Name="LogText" FontFamily="Consolas" FontSize="12" LineHeight="19"
+                               Foreground="{StaticResource Brush.TextPrimary}" Text="Ready."/>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+    </DockPanel>
+</Window>

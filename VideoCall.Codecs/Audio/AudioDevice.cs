@@ -33,6 +33,7 @@ public sealed class AudioCapture : IDisposable
             BufferMilliseconds = ChunkMilliseconds,
         };
         _waveIn.DataAvailable += OnDataAvailable;
+        _waveIn.RecordingStopped += (_, _) => Failed?.Invoke("Microphone recording stopped unexpectedly.");
     }
 
     private void OnDataAvailable(object? sender, WaveInEventArgs e)
@@ -62,7 +63,15 @@ public sealed class AudioCapture : IDisposable
     public void Dispose()
     {
         _waveIn.DataAvailable -= OnDataAvailable;
-        _waveIn.StopRecording();
+
+        try
+        {
+            _waveIn.StopRecording();
+        }
+        catch (InvalidOperationException)
+        {
+        }
+
         _waveIn.Dispose();
     }
 }
@@ -74,6 +83,7 @@ public sealed class AudioPlayer : IDisposable
     private readonly BufferedWaveProvider _provider;
     private readonly WaveOutEvent _waveOut;
     private bool _started;
+    private bool _disposed;
 
     public AudioPlayer()
     {
@@ -88,6 +98,11 @@ public sealed class AudioPlayer : IDisposable
 
     public void Play(byte[] chunk)
     {
+        if (_disposed)
+        {
+            return;
+        }
+
         _provider.AddSamples(chunk, 0, chunk.Length);
 
         if (!_started && _provider.BufferedDuration >= Prebuffer)
@@ -97,12 +112,9 @@ public sealed class AudioPlayer : IDisposable
         }
     }
 
-    public void Start()
-    {
-    }
-
     public void Dispose()
     {
+        _disposed = true;
         _waveOut.Stop();
         _waveOut.Dispose();
     }

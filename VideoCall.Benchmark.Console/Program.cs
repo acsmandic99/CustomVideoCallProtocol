@@ -40,12 +40,12 @@ public static class Program
 
         System.Console.WriteLine();
         System.Console.WriteLine("--- TCP baseline (no loss simulation possible at app level) ---");
-        System.Console.WriteLine("codec  sent  delivered  avgKB  avgLatencyMs");
+        System.Console.WriteLine("codec  sent  delivered  avgKB  avgCycleTimeMs");
 
         foreach (VideoCodec codec in new[] { VideoCodec.H264, VideoCodec.Jpeg })
         {
             TcpResult t = await RunTcpAsync(codec);
-            System.Console.WriteLine($"{codec,-6} {t.Sent,4}  {t.Delivered,8}  {t.AvgFrameKB,5:F1}  {t.AvgLatencyMs,10:F1}");
+            System.Console.WriteLine($"{codec,-6} {t.Sent,4}  {t.Delivered,8}  {t.AvgFrameKB,5:F1}  {t.AvgCycleTimeMs,15:F1}");
         }
 
         System.Console.WriteLine();
@@ -53,7 +53,7 @@ public static class Program
     }
 
     private sealed record UdpResult(int Sent, int Delivered, double DeliveredPercent, double AvgFrameKB, int NackCount, int PliCount);
-    private sealed record TcpResult(int Sent, int Delivered, double AvgFrameKB, double AvgLatencyMs);
+    private sealed record TcpResult(int Sent, int Delivered, double AvgFrameKB, double AvgCycleTimeMs);
 
     private static byte[] RenderFrame(int t)
     {
@@ -108,13 +108,36 @@ public static class Program
         var senderTransport = new LossyTransportDecorator(new UdpMediaTransport(), lossPercent, seed: 11);
         var receiverTransport = new UdpMediaTransport();
 
-        ushort senderPort = (ushort)Random.Shared.Next(21000, 22000);
-        ushort receiverPort = (ushort)Random.Shared.Next(22100, 23000);
+        ushort senderPort = 0;
+        ushort receiverPort = 0;
+        MediaSession? sender = null;
+        MediaSession? receiver = null;
 
-        using var sender = new MediaSession(senderTransport, new IPEndPoint(IPAddress.Loopback, receiverPort), new NullSink());
-        using var receiver = new MediaSession(receiverTransport, new IPEndPoint(IPAddress.Loopback, senderPort), counter);
-        sender.Start(senderPort);
-        receiver.Start(receiverPort);
+        for (int attempt = 0; attempt < 3 && sender is null; attempt++)
+        {
+            senderPort = (ushort)Random.Shared.Next(21000, 22000);
+            receiverPort = (ushort)Random.Shared.Next(22100, 23000);
+
+            try
+            {
+                sender = new MediaSession(senderTransport, new IPEndPoint(IPAddress.Loopback, receiverPort), new NullSink());
+                receiver = new MediaSession(receiverTransport, new IPEndPoint(IPAddress.Loopback, senderPort), counter);
+                sender.Start(senderPort);
+                receiver.Start(receiverPort);
+            }
+            catch (SocketException)
+            {
+                sender?.Dispose();
+                receiver?.Dispose();
+                sender = null;
+                receiver = null;
+            }
+        }
+
+        if (sender is null || receiver is null)
+        {
+            throw new InvalidOperationException("Could not bind benchmark UDP ports after 3 attempts.");
+        }
 
         (IVideoEncoder encoder, var encode) = MakeEncoder(codec);
         long totalBytes = 0;
@@ -197,16 +220,21 @@ public static class Program
         encoder.Dispose();
         listener.Stop();
 
-        return new TcpResult(FrameCount, delivered, totalBytes / 1024.0 / FrameCount, sw.Elapsed.TotalMilliseconds / FrameCount);
+        return new TcpResult(FrameCount, delivered, totalBytes / 1024.0 / FrameCount, sw.Elapsed.TotalMilliseconds / FrameCount); // per-frame cycle time incl. pacing
     }
 
     private sealed class CountingSink : IFrameSink
     {
+        private readonly object _lock = new();
+
         public int Count { get; private set; }
 
         public void OnFrameReceived(ReadOnlyMemory<byte> data, FrameType frameType, uint sequence, VideoCodec videoCodec)
         {
-            Count++;
+            lock (_lock)
+            {
+                Count++;
+            }
         }
     }
 

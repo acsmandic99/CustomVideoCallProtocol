@@ -28,6 +28,9 @@ public sealed class FrameSender : IDisposable
 
     public int RetransmittedFrames { get; private set; }
 
+    /// <summary>false disables the retransmit buffer and keyframe handling (raw UDP baseline).</summary>
+    public bool RecoveryEnabled { get; set; } = true;
+
     public FrameSender(IUdpMediaTransport transport, IPEndPoint remote)
     {
         _transport = transport;
@@ -47,6 +50,11 @@ public sealed class FrameSender : IDisposable
 
     public void HandleKeyframeRequest(uint[] missingSequences)
     {
+        if (!RecoveryEnabled)
+        {
+            return;
+        }
+
         bool needKeyframe = false;
 
         foreach (uint missingSequence in missingSequences)
@@ -103,7 +111,7 @@ public sealed class FrameSender : IDisposable
     {
         uint sequence = retransmitSequence ?? (frameType == FrameType.Audio ? ++_nextAudioSequence : ++_nextVideoSequence);
 
-        if (retransmitSequence is null)
+        if (retransmitSequence is null && RecoveryEnabled)
         {
             lock (_recentLock)
             {

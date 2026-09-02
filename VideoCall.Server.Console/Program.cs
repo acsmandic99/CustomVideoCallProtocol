@@ -16,12 +16,13 @@ using var loggerFactory = LoggerFactory.Create(builder =>
 });
 
 int timeoutSeconds = args.Length > 0 && int.TryParse(args[0], out int parsed) && parsed > 0 ? parsed : 30;
+int port = args.Length > 1 && int.TryParse(args[1], out int parsedPort) && parsedPort is > 0 and < 65536 ? parsedPort : 5000;
 
 var codec = new BinaryMessageCodec(new DefaultSignalingMessageFactory());
 var server = new SignalingServer(codec, loggerFactory.CreateLogger<SignalingServer>(), TimeSpan.FromSeconds(timeoutSeconds));
 
-await server.StartAsync(5000);
-Console.WriteLine($"Server listening on port 5000 (ringing timeout {timeoutSeconds}s). Press Enter to stop.");
+await server.StartAsync(port);
+Console.WriteLine($"Server listening on port {port} (ringing timeout {timeoutSeconds}s). Press Enter to stop.");
 
 Console.ReadLine();
 

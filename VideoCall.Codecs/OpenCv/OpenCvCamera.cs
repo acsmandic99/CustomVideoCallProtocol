@@ -8,7 +8,6 @@ public sealed class OpenCvCamera : ICamera
 {
     private static readonly TimeSpan FrameTimeout = TimeSpan.FromSeconds(3);
 
-    private VideoCapture? _capture;
     private CancellationTokenSource? _cts;
     private Task? _loopTask;
 
@@ -17,6 +16,11 @@ public sealed class OpenCvCamera : ICamera
 
     public void Start(int width, int height, int fps)
     {
+        if (_cts is not null)
+        {
+            return;
+        }
+
         VideoCapture? capture = FindUsableCapture();
 
         if (capture is null)
@@ -29,7 +33,6 @@ public sealed class OpenCvCamera : ICamera
         capture.Set(VideoCaptureProperties.FrameHeight, height);
         capture.Set(VideoCaptureProperties.Fps, fps);
 
-        _capture = capture;
         _cts = new CancellationTokenSource();
         _loopTask = Task.Run(() => CaptureLoop(capture, _cts.Token));
     }
@@ -71,42 +74,79 @@ public sealed class OpenCvCamera : ICamera
 
     private void CaptureLoop(VideoCapture capture, CancellationToken cancellationToken)
     {
-        using var frame = new Mat();
-        var lastFrameTime = Stopwatch.GetTimestamp();
-        bool failureReported = false;
-
-        while (!cancellationToken.IsCancellationRequested)
+        // the loop owns the capture: disposing it here avoids a use-after-free
+        // when Stop() cancels while a native read is still in progress
+        try
         {
-            bool read = false;
-            try
-            {
-                read = capture.Read(frame);
-            }
-            catch (Exception)
-            {
-                break;
-            }
+            using var frame = new Mat();
+            var lastFrameTime = Stopwatch.GetTimestamp();
+            bool failureReported = false;
 
-            if (!read || frame.Empty())
+            while (!cancellationToken.IsCancellationRequested)
             {
-                if (!failureReported && Stopwatch.GetElapsedTime(lastFrameTime) > FrameTimeout)
+                bool read = false;
+                try
                 {
-                    failureReported = true;
-                    Failed?.Invoke("Camera opened but produced no frames for 3 seconds.");
+                    read = capture.Read(frame);
+                }
+                catch (Exception)
+                {
                     break;
                 }
 
-                Thread.Sleep(5);
-                continue;
+                if (!read || frame.Empty())
+                {
+                    if (!failureReported && Stopwatch.GetElapsedTime(lastFrameTime) > FrameTimeout)
+                    {
+                        failureReported = true;
+                        Failed?.Invoke("Camera opened but produced no frames for 3 seconds.");
+                        break;
+                    }
+
+                    Thread.Sleep(5);
+                    continue;
+                }
+
+                lastFrameTime = Stopwatch.GetTimestamp();
+
+                using Mat? converted = ToBgr24(frame);
+
+                if (converted is null)
+                {
+                    continue;
+                }
+
+                var data = new byte[converted.Rows * converted.Cols * converted.ElemSize()];
+                Marshal.Copy(converted.Data, data, 0, data.Length);
+
+                FrameCaptured?.Invoke(new VideoFrame(data, converted.Cols, converted.Rows));
             }
-
-            lastFrameTime = Stopwatch.GetTimestamp();
-
-            var data = new byte[frame.Rows * frame.Cols * frame.ElemSize()];
-            Marshal.Copy(frame.Data, data, 0, data.Length);
-
-            FrameCaptured?.Invoke(new VideoFrame(data, frame.Cols, frame.Rows));
         }
+        finally
+        {
+            capture.Dispose();
+        }
+    }
+
+    /// <summary>Normalizes whatever the driver delivers (gray, BGRA, BGR) into a BGR24 Mat.</summary>
+    private static Mat? ToBgr24(Mat frame)
+    {
+        if (frame.Type() == MatType.CV_8UC3)
+        {
+            return frame.Clone();
+        }
+
+        if (frame.Type() == MatType.CV_8UC1)
+        {
+            return frame.CvtColor(ColorConversionCodes.GRAY2BGR);
+        }
+
+        if (frame.Type() == MatType.CV_8UC4)
+        {
+            return frame.CvtColor(ColorConversionCodes.BGRA2BGR);
+        }
+
+        return null;
     }
 
     public void Stop()
@@ -116,8 +156,6 @@ public sealed class OpenCvCamera : ICamera
         _cts?.Dispose();
         _cts = null;
         _loopTask = null;
-        _capture?.Dispose();
-        _capture = null;
     }
 
     public void Dispose()

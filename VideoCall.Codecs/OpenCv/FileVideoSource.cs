@@ -39,6 +39,11 @@ public sealed class FileVideoSource : ICamera
 
     public void Start(int width, int height, int fps)
     {
+        if (_cts is not null)
+        {
+            return;
+        }
+
         var capture = new VideoCapture(_path, VideoCaptureAPIs.FFMPEG);
 
         if (!capture.IsOpened())
@@ -189,9 +194,16 @@ public sealed class FileVideoSource : ICamera
                 continue;
             }
 
-            var data = new byte[frame.Rows * frame.Cols * frame.ElemSize()];
-            Marshal.Copy(frame.Data, data, 0, data.Length);
-            FrameCaptured?.Invoke(new VideoFrame(data, frame.Cols, frame.Rows));
+            using Mat? converted = ToBgr24(frame);
+
+            if (converted is null)
+            {
+                continue;
+            }
+
+            var data = new byte[converted.Rows * converted.Cols * converted.ElemSize()];
+            Marshal.Copy(converted.Data, data, 0, data.Length);
+            FrameCaptured?.Invoke(new VideoFrame(data, converted.Cols, converted.Rows));
             frameIndex++;
 
             if (audioMaster)
@@ -252,6 +264,27 @@ public sealed class FileVideoSource : ICamera
         _cts?.Dispose();
         _cts = null;
         _loopTask = null;
+        _audioTask = null;
+    }
+
+    private static Mat? ToBgr24(Mat frame)
+    {
+        if (frame.Type() == MatType.CV_8UC3)
+        {
+            return frame.Clone();
+        }
+
+        if (frame.Type() == MatType.CV_8UC1)
+        {
+            return frame.CvtColor(ColorConversionCodes.GRAY2BGR);
+        }
+
+        if (frame.Type() == MatType.CV_8UC4)
+        {
+            return frame.CvtColor(ColorConversionCodes.BGRA2BGR);
+        }
+
+        return null;
     }
 
     public void Dispose()

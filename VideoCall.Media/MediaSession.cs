@@ -19,12 +19,19 @@ public sealed class MediaSession : IDisposable
 
     public int KeyframeRequestCount => _receiver.KeyframeRequestCount;
     public int NackCount => _receiver.NackCount;
+    public int RetransmittedFrames => _sender.RetransmittedFrames;
 
-    public MediaSession(IUdpMediaTransport transport, IPEndPoint remote, IFrameSink sink)
+    public MediaSession(IUdpMediaTransport transport, IPEndPoint remote, IFrameSink sink, bool recoveryEnabled = true)
     {
         _transport = transport;
         _sender = new FrameSender(transport, remote);
         _receiver = new FrameReceiver(transport, remote, sink);
+
+        if (!recoveryEnabled)
+        {
+            _sender.RecoveryEnabled = false;
+            _receiver.RecoveryEnabled = false;
+        }
     }
 
     public void Start(ushort localPort)

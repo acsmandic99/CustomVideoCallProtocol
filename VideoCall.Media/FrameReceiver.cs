@@ -65,6 +65,9 @@ public sealed class FrameReceiver
     public int KeyframeRequestCount { get; private set; }
     public int NackCount { get; private set; }
 
+    /// <summary>false delivers frames as soon as they reassemble, without reorder/NACK/PLI (raw UDP baseline).</summary>
+    public bool RecoveryEnabled { get; set; } = true;
+
     public FrameReceiver(IUdpMediaTransport transport, IPEndPoint remote, IFrameSink sink)
     {
         _transport = transport;
@@ -106,7 +109,10 @@ public sealed class FrameReceiver
             _highestSeen = sequence;
         }
 
-        ExpireStale();
+        if (RecoveryEnabled)
+        {
+            ExpireStale();
+        }
 
         if (!_pending.TryGetValue(sequence, out PendingFrame? pending))
         {
@@ -139,6 +145,18 @@ public sealed class FrameReceiver
 
             _pending.Remove(sequence);
             _hold[sequence] = new CompletedFrame(data, pending.FrameType, pending.VideoCodec);
+        }
+
+        if (!RecoveryEnabled)
+        {
+            if (_hold.Remove(sequence, out CompletedFrame? immediate))
+            {
+                _lastDelivered = sequence;
+                _deliveredAny = true;
+                _sink.OnFrameReceived(immediate.Data, immediate.FrameType, sequence, immediate.VideoCodec);
+            }
+
+            return;
         }
 
         DeliverInOrder();
@@ -280,7 +298,9 @@ public sealed class FrameReceiver
 
         for (uint seq = _lastDelivered + 1; seq <= _highestSeen && (holes?.Count ?? 0) < MaxHolesPerRequest; seq++)
         {
-            if (!_hold.ContainsKey(seq))
+            // a frame still being assembled (_pending) is not a hole — requesting it
+            // would trigger a spurious retransmission of an in-flight frame
+            if (!_hold.ContainsKey(seq) && !_pending.ContainsKey(seq))
             {
                 (holes ??= new List<uint>()).Add(seq);
             }

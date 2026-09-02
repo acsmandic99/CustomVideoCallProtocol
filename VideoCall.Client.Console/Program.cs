@@ -90,6 +90,13 @@ while (true)
 
             listener.PrintSent($"CallRequest callee={parts[1]} udp={localIp}:{udpPort}");
             Guid callId = await client.CallAsync(parts[1], localIp, udpPort);
+
+            if (callId == Guid.Empty)
+            {
+                listener.PrintInfo("Call request was not accepted by the server.");
+                break;
+            }
+
             listener.SetActiveCall(callId);
             listener.PrintInfo($"Call pending, callId={callId}");
             break;

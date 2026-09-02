@@ -48,7 +48,7 @@ public sealed class SyntheticFrameGenerator
             var data = new byte[_frameSize];
             _random.NextBytes(data);
 
-            return (data, frameType, forced && frameType == FrameType.Keyframe);
+            return (data, frameType, forced);
         }
     }
 }

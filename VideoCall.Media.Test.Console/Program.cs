@@ -95,7 +95,7 @@ public static class Program
             await Task.Delay(33);
         }
 
-        await Task.Delay(1500);
+        await Task.Delay(3000);
 
         System.Console.WriteLine($"  Result: sent={FrameCount} (keyframes={sentKeyframes}, forced={forcedKeyframes}), " +
                                  $"received complete={bobSink.ReceivedCount} (keyframes={bobSink.KeyframeCount}), " +

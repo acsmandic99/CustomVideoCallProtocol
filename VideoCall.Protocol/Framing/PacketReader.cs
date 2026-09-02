@@ -20,13 +20,17 @@ public static class PacketReader
             return false;
         }
 
-        byte version = buffer[2];
+        if (buffer[2] != Packet.CurrentVersion)
+        {
+            return false;
+        }
+
         var messageType = (MessageType)buffer[3];
         var frameType = (FrameType)buffer[4];
         uint sequence = BinaryPrimitives.ReadUInt32BigEndian(buffer.Slice(5, 4));
         uint payloadLength = BinaryPrimitives.ReadUInt32BigEndian(buffer.Slice(9, 4));
 
-        if (buffer.Length < Packet.HeaderSize + payloadLength)
+        if (payloadLength > Packet.MaxPayloadSize || buffer.Length < Packet.HeaderSize + payloadLength)
         {
             return false;
         }
@@ -39,7 +43,7 @@ public static class PacketReader
 
         packet = new Packet
         {
-            Version = version,
+            Version = Packet.CurrentVersion,
             MessageType = messageType,
             FrameType = frameType,
             Sequence = sequence,

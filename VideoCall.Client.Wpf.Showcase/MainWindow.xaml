@@ -1,0 +1,293 @@
+<Window x:Class="VideoCall.Client.Wpf.Showcase.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d"
+        Title="CustomVideoCall"
+        Height="760" Width="1220" MinHeight="640" MinWidth="1000"
+        WindowStartupLocation="CenterScreen"
+        FontFamily="Segoe UI"
+        Background="{StaticResource Brush.WindowBackground}">
+    <Grid>
+        <!-- ================= Registration page ================= -->
+        <Grid x:Name="RegisterView">
+            <Grid.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                    <GradientStop Color="#E8EEF7" Offset="0"/>
+                    <GradientStop Color="#F6F7F9" Offset="1"/>
+                </LinearGradientBrush>
+            </Grid.Background>
+
+            <Border Style="{StaticResource Card}" Width="400" Padding="40,36"
+                    VerticalAlignment="Center" HorizontalAlignment="Center">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <Border Width="48" Height="48" CornerRadius="12" Background="{StaticResource Brush.Accent}">
+                            <TextBlock Text="&#xE714;" FontFamily="Segoe MDL2 Assets" FontSize="22"
+                                       Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel Margin="14,0,0,0" VerticalAlignment="Center">
+                            <TextBlock Text="CustomVideoCall" Style="{StaticResource Text.H1}"/>
+                            <TextBlock Text="Peer-to-peer video calling on a custom protocol"
+                                       Style="{StaticResource Text.Caption}" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <TextBlock Text="Your name" Style="{StaticResource Text.H2}" Margin="0,28,0,8"/>
+                    <TextBox x:Name="NameBox" KeyDown="NameBox_KeyDown"/>
+
+                    <TextBlock Text="Signaling server" Style="{StaticResource Text.Caption}" Margin="0,16,0,6"/>
+                    <TextBox x:Name="ServerBox" Text="127.0.0.1" KeyDown="NameBox_KeyDown"/>
+
+                    <Button x:Name="RegisterButton" Style="{StaticResource Button.Primary}"
+                            Content="Sign in" Height="42" Margin="0,26,0,0" FontSize="14"
+                            Click="RegisterButton_Click"/>
+
+                    <TextBlock x:Name="RegisterStatus" Style="{StaticResource Text.Caption}"
+                               Margin="0,14,0,0" TextWrapping="Wrap" MinHeight="16"
+                               Text="Enter a name to register with the signaling server."/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ================= Home page ================= -->
+        <DockPanel x:Name="HomeView" Visibility="Collapsed">
+
+            <!-- Sidebar -->
+            <Border DockPanel.Dock="Left" Width="300" Background="{StaticResource Brush.CardBackground}"
+                    BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,0,1,0">
+                <DockPanel Margin="20,18,20,16">
+                    <StackPanel DockPanel.Dock="Top">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Width="32" Height="32" CornerRadius="8" Background="{StaticResource Brush.Accent}">
+                                <TextBlock Text="&#xE714;" FontFamily="Segoe MDL2 Assets" FontSize="15"
+                                           Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="CustomVideoCall" FontSize="14" FontWeight="SemiBold"
+                                       Foreground="{StaticResource Brush.TextPrimary}"
+                                       VerticalAlignment="Center" Margin="10,0,0,0"/>
+                        </StackPanel>
+
+                        <Border Background="{StaticResource Brush.CardSoft}"
+                                BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
+                                CornerRadius="12" Padding="14" Margin="0,20,0,0">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Width="40" Height="40" CornerRadius="20" Background="{StaticResource Brush.AccentTint}">
+                                    <TextBlock x:Name="AvatarText" Text="?" FontSize="14" FontWeight="SemiBold"
+                                               Foreground="#1E40AF" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock x:Name="IdentityName" Text="—" Style="{StaticResource Text.H2}"/>
+                                    <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                        <Ellipse Width="7" Height="7" Fill="{StaticResource Brush.Success}"/>
+                                        <TextBlock Text="Registered" Style="{StaticResource Text.Caption}" Margin="6,0,0,0"/>
+                                    </StackPanel>
+                                </StackPanel>
+                                <Button Grid.Column="2" Style="{StaticResource Button.Link}" Content="Sign out"
+                                        VerticalAlignment="Center" Click="SignOutButton_Click"/>
+                            </Grid>
+                        </Border>
+
+                        <TextBlock Text="Start a call" Style="{StaticResource Text.H2}" Margin="0,24,0,4"/>
+                        <TextBlock Text="Enter the other user's registered name."
+                                   Style="{StaticResource Text.Caption}" Margin="0,0,0,10"/>
+                        <TextBox x:Name="CalleeBox" KeyDown="CalleeBox_KeyDown"/>
+                        <Button x:Name="CallButton" Style="{StaticResource Button.Primary}" Height="40"
+                                Margin="0,10,0,0" IsEnabled="False" Click="CallButton_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#xE717;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                                <TextBlock Text="Call" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+
+                        <TextBlock x:Name="HomeStatus" Style="{StaticResource Text.Caption}" TextWrapping="Wrap"
+                                   Margin="0,12,0,0" MinHeight="32"
+                                   Text="Ready. Media flows peer-to-peer over UDP; the server only routes signaling."/>
+                    </StackPanel>
+
+                    <StackPanel DockPanel.Dock="Bottom">
+                        <StackPanel Orientation="Horizontal">
+                            <Border Style="{StaticResource Chip}"><TextBlock Text="H.264"/></Border>
+                            <Border Style="{StaticResource Chip}" Margin="6,0,0,0"><TextBlock Text="P2P · UDP"/></Border>
+                            <Border Style="{StaticResource Chip}" Margin="6,0,0,0"><TextBlock Text="NACK + PLI"/></Border>
+                        </StackPanel>
+                    </StackPanel>
+                    <Grid/>
+                </DockPanel>
+            </Border>
+
+            <!-- Video stage -->
+            <Grid Margin="16">
+                <Border x:Name="StageBorder" Background="{StaticResource Brush.StageIdle}" CornerRadius="16"
+                        BorderBrush="{StaticResource Brush.Border}" BorderThickness="1" ClipToBounds="True">
+                    <Grid>
+                        <Image x:Name="BigImage" Stretch="Uniform"/>
+
+                        <!-- idle placeholder -->
+                        <StackPanel x:Name="IdlePlaceholder" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <Border Width="76" Height="76" CornerRadius="38" Background="{StaticResource Brush.CardBackground}"
+                                    BorderBrush="{StaticResource Brush.Border}" BorderThickness="1" HorizontalAlignment="Center">
+                                <TextBlock Text="&#xE722;" FontFamily="Segoe MDL2 Assets" FontSize="30"
+                                           Foreground="{StaticResource Brush.TextDisabled}"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            </Border>
+                            <TextBlock Text="No active call" Style="{StaticResource Text.H2}"
+                                       HorizontalAlignment="Center" Margin="0,16,0,0"/>
+                            <TextBlock Text="Enter a name in the panel on the left and press Call."
+                                       Style="{StaticResource Text.Caption}" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                        </StackPanel>
+
+                        <!-- protocol stats HUD -->
+                        <Border x:Name="StatsHud" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="14"
+                                Padding="14,10" CornerRadius="10" Background="#D9111827" Visibility="Collapsed">
+                            <TextBlock x:Name="StatsText" FontFamily="Consolas" FontSize="12" LineHeight="19"
+                                       Foreground="#E5E7EB" Text="—"/>
+                        </Border>
+
+                        <!-- what the big view shows -->
+                        <Border x:Name="StageLabel" Style="{StaticResource PillDark}"
+                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="14" Visibility="Collapsed">
+                            <TextBlock x:Name="StageLabelText" Text="Remote · via protocol"/>
+                        </Border>
+
+                        <!-- local picture-in-picture -->
+                        <Border x:Name="PipBorder" Width="250" Height="188"
+                                HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="16,16,16,88"
+                                Background="#111827" CornerRadius="10" BorderBrush="White" BorderThickness="2"
+                                ClipToBounds="True" Effect="{StaticResource Effect.PipShadow}" Cursor="Hand"
+                                ToolTip="Click to swap local and remote video" Visibility="Collapsed"
+                                MouseLeftButtonUp="Pip_Click">
+                            <Grid>
+                                <Image x:Name="PipImage" Stretch="Uniform"/>
+                                <Border Style="{StaticResource PillDark}" HorizontalAlignment="Left"
+                                        VerticalAlignment="Bottom" Margin="8">
+                                    <TextBlock x:Name="PipLabelText" Text="You"/>
+                                </Border>
+                                <Border x:Name="PipMutePill" Style="{StaticResource PillDark}"
+                                        HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed">
+                                    <TextBlock Text="Camera off"/>
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <!-- call control bar -->
+                        <Border x:Name="CallBar" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="16"
+                                Background="#E61F2937" CornerRadius="28" Padding="12,6" Visibility="Collapsed">
+                            <StackPanel Orientation="Horizontal">
+                                <ToggleButton x:Name="MicToggle" Style="{StaticResource CallToggle}"
+                                              Checked="MicToggle_Changed" Unchecked="MicToggle_Changed" ToolTip="Mute microphone">
+                                    <Grid Width="24" Height="24">
+                                        <TextBlock x:Name="MicIcon" Text="&#xE720;" FontFamily="Segoe MDL2 Assets" FontSize="18"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        <TextBlock x:Name="MicOffIcon" Text="&#xEC54;" FontFamily="Segoe MDL2 Assets" FontSize="18"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
+                                    </Grid>
+                                </ToggleButton>
+                                <ToggleButton x:Name="CamToggle" Style="{StaticResource CallToggle}" Margin="10,0,0,0"
+                                              Checked="CamToggle_Changed" Unchecked="CamToggle_Changed" ToolTip="Turn camera off">
+                                    <Grid Width="24" Height="24">
+                                        <TextBlock Text="&#xE714;" FontFamily="Segoe MDL2 Assets" FontSize="18"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        <Line x:Name="CamSlash" X1="2" Y1="22" X2="22" Y2="2"
+                                              Stroke="#F87171" StrokeThickness="2.5"
+                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" Visibility="Collapsed"/>
+                                    </Grid>
+                                </ToggleButton>
+                                <Button x:Name="StatsButton" Style="{StaticResource CallRound}" Margin="10,0,0,0"
+                                        Click="StatsButton_Click" ToolTip="Toggle protocol statistics">
+                                    <TextBlock x:Name="StatsIcon" Text="&#xE9D9;" FontFamily="Segoe MDL2 Assets" FontSize="18"
+                                               Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Button>
+                                <Button Style="{StaticResource Hangup}" Margin="14,0,2,0"
+                                        Click="HangupButton_Click" ToolTip="Hang up">
+                                    <TextBlock Text="&#xE778;" FontFamily="Segoe MDL2 Assets" FontSize="20"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ringing overlay -->
+                        <Border x:Name="RingingOverlay" Background="#D9F3F4F6" Visibility="Collapsed">
+                            <Border Style="{StaticResource Card}" Width="360" Padding="32"
+                                    VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <StackPanel>
+                                    <Border Width="64" Height="64" CornerRadius="32"
+                                            Background="{StaticResource Brush.AccentTint}" HorizontalAlignment="Center">
+                                        <Border.Triggers>
+                                            <EventTrigger RoutedEvent="Loaded">
+                                                <BeginStoryboard>
+                                                    <Storyboard RepeatBehavior="Forever">
+                                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                         From="1" To="0.35" Duration="0:0:0.9" AutoReverse="True"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </EventTrigger>
+                                        </Border.Triggers>
+                                        <TextBlock Text="&#xE717;" FontFamily="Segoe MDL2 Assets" FontSize="26"
+                                                   Foreground="{StaticResource Brush.Accent}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <TextBlock x:Name="RingingTitle" Text="Calling…" Style="{StaticResource Text.H2}"
+                                               HorizontalAlignment="Center" Margin="0,18,0,0"/>
+                                    <TextBlock Text="Waiting for them to answer." Style="{StaticResource Text.Caption}"
+                                               HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                    <Button Style="{StaticResource Button.Danger}" Content="Cancel call"
+                                            Width="150" Height="40" Margin="0,22,0,0" Click="CancelCallButton_Click"/>
+                                </StackPanel>
+                            </Border>
+                        </Border>
+
+                        <!-- incoming call overlay -->
+                        <Border x:Name="IncomingOverlay" Background="#D9F3F4F6" Visibility="Collapsed">
+                            <Border Style="{StaticResource Card}" Width="380" Padding="32"
+                                    VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <StackPanel>
+                                    <Border Width="64" Height="64" CornerRadius="32"
+                                            Background="{StaticResource Brush.SuccessTint}" HorizontalAlignment="Center">
+                                        <Border.Triggers>
+                                            <EventTrigger RoutedEvent="Loaded">
+                                                <BeginStoryboard>
+                                                    <Storyboard RepeatBehavior="Forever">
+                                                        <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                                         From="1" To="0.35" Duration="0:0:0.9" AutoReverse="True"/>
+                                                    </Storyboard>
+                                                </BeginStoryboard>
+                                            </EventTrigger>
+                                        </Border.Triggers>
+                                        <TextBlock Text="&#xE717;" FontFamily="Segoe MDL2 Assets" FontSize="26"
+                                                   Foreground="{StaticResource Brush.Success}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                    </Border>
+                                    <TextBlock Text="Incoming call" Style="{StaticResource Text.H2}"
+                                               HorizontalAlignment="Center" Margin="0,18,0,0"/>
+                                    <TextBlock x:Name="IncomingFrom" Text="—" Style="{StaticResource Text.Body}"
+                                               FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,4,0,0"/>
+                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,22,0,0">
+                                        <Button Style="{StaticResource Button.Success}" Width="140" Height="40" Click="AcceptButton_Click">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="&#xE717;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                                                <TextBlock Text="Accept" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Style="{StaticResource Button.Danger}" Width="140" Height="40" Margin="12,0,0,0" Click="DeclineButton_Click">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="&#xE778;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                                                <TextBlock Text="Decline" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </Border>
+                    </Grid>
+                </Border>
+            </Grid>
+        </DockPanel>
+    </Grid>
+</Window>

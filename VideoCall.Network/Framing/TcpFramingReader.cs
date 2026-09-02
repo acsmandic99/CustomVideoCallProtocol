@@ -16,32 +16,22 @@ public sealed class TcpFramingReader
     {
         packet = null;
 
-        if (_buffer.Count < Packet.HeaderSize)
+        if (!TrySyncToMagic())
         {
             return false;
         }
 
-        var header = _buffer.ToArray();
-        ushort magic = (ushort)((header[0] << 8) | header[1]);
-        if (magic != Packet.Magic)
-        {
-            int magicIndex = FindMagic(header);
-            if (magicIndex < 0)
-            {
-                _buffer.RemoveRange(0, _buffer.Count - 1);
-                return false;
-            }
-            _buffer.RemoveRange(0, magicIndex);
-            header = _buffer.ToArray();
-        }
+        uint payloadLength = ((uint)_buffer[9] << 24) | ((uint)_buffer[10] << 16) | ((uint)_buffer[11] << 8) | _buffer[12];
 
-        if (_buffer.Count < Packet.HeaderSize)
+        if (payloadLength > Packet.MaxPayloadSize)
         {
+            // corrupted length: the stream can no longer be trusted at this offset, resync
+            _buffer.RemoveAt(0);
             return false;
         }
 
-        uint payloadLength = ((uint)header[9] << 24) | ((uint)header[10] << 16) | ((uint)header[11] << 8) | header[12];
         int totalSize = Packet.HeaderSize + (int)payloadLength;
+
         if (_buffer.Count < totalSize)
         {
             return false;
@@ -54,15 +44,39 @@ public sealed class TcpFramingReader
         return PacketReader.TryParse(packetBytes, out packet);
     }
 
-    private static int FindMagic(byte[] data)
+    private bool TrySyncToMagic()
     {
-        for (int i = 1; i < data.Length - 1; i++)
+        while (_buffer.Count >= Packet.HeaderSize)
         {
-            if (data[i] == 0x56 && data[i + 1] == 0x43)
+            if (_buffer[0] == (Packet.Magic >> 8) && _buffer[1] == (Packet.Magic & 0xFF))
+            {
+                return true;
+            }
+
+            int magicIndex = FindMagic(1);
+
+            if (magicIndex < 0)
+            {
+                _buffer.RemoveRange(0, _buffer.Count - 1);
+                return false;
+            }
+
+            _buffer.RemoveRange(0, magicIndex);
+        }
+
+        return false;
+    }
+
+    private int FindMagic(int start)
+    {
+        for (int i = start; i < _buffer.Count - 1; i++)
+        {
+            if (_buffer[i] == 0x56 && _buffer[i + 1] == 0x43)
             {
                 return i;
             }
         }
+
         return -1;
     }
 }

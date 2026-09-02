@@ -36,6 +36,8 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
     private Guid _incomingCallId;
     private IPEndPoint? _remoteEndpoint;
     private ushort _localUdpPort;
+    private CancellationTokenSource? _keepAliveCts;
+    private Task? _keepAliveTask;
 
     private SourceKind _source = SourceKind.WebCamera;
     private string _videoFilePath = string.Empty;
@@ -123,7 +125,9 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
     public async Task ConnectAndRegisterAsync(string serverHost, int serverPort, string userId)
     {
         var codecFactory = new BinaryMessageCodec(new DefaultSignalingMessageFactory());
-        _signaling = new SignalingClient(codecFactory, this, NullLogger<SignalingClient>.Instance);
+        var guard = new ConnectionGuard(this);
+        _signaling = new SignalingClient(codecFactory, guard, NullLogger<SignalingClient>.Instance);
+        guard.Bind(_signaling);
         _localUdpPort = (ushort)Random.Shared.Next(20000, 25000);
 
         await _signaling.ConnectAsync(serverHost, serverPort);
@@ -131,12 +135,14 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
 
         if (!ok)
         {
-            await _signaling.DisconnectAsync();
+            SignalingClient? failed = _signaling;
             _signaling = null;
+            await failed.DisconnectAsync();
             throw new InvalidOperationException("Registration failed: name already taken.");
         }
 
         RegisteredName = userId;
+        StartKeepAlive();
     }
 
     public async Task CallAsync(string calleeId)
@@ -199,19 +205,58 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
     {
         StopMedia();
 
-        if (_signaling is not null)
+        SignalingClient? signaling = _signaling;
+        _signaling = null;
+
+        if (signaling is not null)
         {
             if (_activeCallId != Guid.Empty)
             {
-                await _signaling.HangupAsync(_activeCallId);
+                await signaling.HangupAsync(_activeCallId);
             }
 
-            await _signaling.DisconnectAsync();
-            _signaling = null;
+            await signaling.DisconnectAsync();
         }
 
         _activeCallId = Guid.Empty;
         _incomingCallId = Guid.Empty;
+        StopKeepAlive();
+    }
+
+    private void StartKeepAlive()
+    {
+        StopKeepAlive();
+        _keepAliveCts = new CancellationTokenSource();
+        var signaling = _signaling;
+        var token = _keepAliveCts.Token;
+
+        _keepAliveTask = Task.Run(async () =>
+        {
+            using var timer = new PeriodicTimer(TimeSpan.FromSeconds(20));
+
+            try
+            {
+                while (await timer.WaitForNextTickAsync(token) && _signaling == signaling)
+                {
+                    await signaling.SendKeepAliveAsync();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception)
+            {
+            }
+        }, token);
+    }
+
+    private void StopKeepAlive()
+    {
+        _keepAliveCts?.Cancel();
+        _keepAliveTask?.Wait(TimeSpan.FromSeconds(1));
+        _keepAliveCts?.Dispose();
+        _keepAliveCts = null;
+        _keepAliveTask = null;
     }
 
     private void StartMedia()
@@ -264,7 +309,6 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
         }
 
         _audioPlayer = new AudioPlayer();
-        _audioPlayer.Start();
 
         SentFrames = 0;
         ReceivedFrames = 0;
@@ -326,6 +370,8 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
         if (data.Length == 0)
         {
             EmptyEncodes++;
+            LocalVideoFrame?.Invoke(frame);
+            return;
         }
 
         SentFrames++;
@@ -336,6 +382,7 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
     public void OnDisconnected()
     {
         StopMedia();
+        StopKeepAlive();
         _activeCallId = Guid.Empty;
         _incomingCallId = Guid.Empty;
         DisconnectedFromServer?.Invoke();
@@ -410,7 +457,7 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
                     ? (_owner._h264Decoder ??= new H264VideoDecoder())
                     : _owner._jpegDecoder;
 
-                VideoFrame? frame = decoder.Decode(data.ToArray(), frameType);
+                VideoFrame? frame = decoder.Decode(data.ToArray());
 
                 if (frame is not null)
                 {
@@ -424,9 +471,92 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
         }
     }
 
+    private sealed class ConnectionGuard : ISignalingListener
+    {
+        private readonly VideoCallClient _owner;
+        private SignalingClient? _client;
+
+        public ConnectionGuard(VideoCallClient owner)
+        {
+            _owner = owner;
+        }
+
+        public void Bind(SignalingClient client)
+        {
+            _client = client;
+        }
+
+        private bool IsActive => _client is not null && _owner._signaling == _client;
+
+        public void OnDisconnected()
+        {
+            if (IsActive)
+            {
+                _owner.OnDisconnected();
+            }
+        }
+
+        public void OnRegisterAck(RegisterAckMessage message)
+        {
+            if (IsActive)
+            {
+                _owner.OnRegisterAck(message);
+            }
+        }
+
+        public void OnCallRequestAck(CallRequestAckMessage message)
+        {
+            if (IsActive)
+            {
+                _owner.OnCallRequestAck(message);
+            }
+        }
+
+        public void OnIncomingCall(IncomingCallMessage message)
+        {
+            if (IsActive)
+            {
+                _owner.OnIncomingCall(message);
+            }
+        }
+
+        public void OnCallAccepted(CallAcceptMessage message)
+        {
+            if (IsActive)
+            {
+                _owner.OnCallAccepted(message);
+            }
+        }
+
+        public void OnCallRejected(CallRejectMessage message)
+        {
+            if (IsActive)
+            {
+                _owner.OnCallRejected(message);
+            }
+        }
+
+        public void OnCallHangup(HangupMessage message)
+        {
+            if (IsActive)
+            {
+                _owner.OnCallHangup(message);
+            }
+        }
+
+        public void OnKeepAlive()
+        {
+            if (IsActive)
+            {
+                _owner.OnKeepAlive();
+            }
+        }
+    }
+
     public void Dispose()
     {
         StopMedia();
+        StopKeepAlive();
         _h264Decoder?.Dispose();
         _jpegDecoder.Dispose();
         DisconnectAsync().GetAwaiter().GetResult();
