@@ -10,7 +10,9 @@ namespace VideoCall.Benchmark.Core;
 /// </summary>
 public static class ResultWriter
 {
-    public static string Write(BenchmarkResult result, string rootDirectory = "BenchmarkResults")
+    private const string DefaultRootDirectory = "BenchmarkResults";
+
+    public static string Write(BenchmarkResult result, string rootDirectory = DefaultRootDirectory)
     {
         string directory = CreateRunDirectory(rootDirectory, result.Config.TestName, null);
         WriteRun(result, directory);
@@ -21,9 +23,10 @@ public static class ResultWriter
         BenchmarkConfig baseConfig,
         IReadOnlyList<int> lossLevels,
         IProgress<string>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string rootDirectory = DefaultRootDirectory)
     {
-        string directory = CreateRunDirectory("BenchmarkResults", baseConfig.TestName, "sweep");
+        string directory = CreateRunDirectory(rootDirectory, baseConfig.TestName, "sweep");
 
         var summaries = new List<(int Loss, BenchmarkResult Result)>();
 
@@ -39,7 +42,7 @@ public static class ResultWriter
         await using (var sweep = new StreamWriter(Path.Combine(directory, "sweep-summary.csv"), false, new UTF8Encoding(true)))
         {
             await sweep.WriteLineAsync("loss,sent,delivered,deliveredPercent,decodablePercent,fpsSent,fpsDelivered,goodputKbPerSec," +
-                                       "nack,pli,retransmitted,latencyAvgMs,latencyP50Ms,latencyP95Ms,latencyP99Ms,latencyMaxMs,maxGapMs,outOfOrder,avgFrameKb");
+                                       "nack,pli,retransmitted,latencyAvgMs,latencyP50Ms,latencyP95Ms,latencyP99Ms,latencyMaxMs,maxGapMs,outOfOrder,avgFrameKb,repairRttMs");
 
             foreach ((int loss, BenchmarkResult r) in summaries)
             {
@@ -52,7 +55,8 @@ public static class ResultWriter
                     s.LatencyAvgMs.ToString("F2", CultureInfo.InvariantCulture), s.LatencyP50Ms.ToString("F2", CultureInfo.InvariantCulture),
                     s.LatencyP95Ms.ToString("F2", CultureInfo.InvariantCulture), s.LatencyP99Ms.ToString("F2", CultureInfo.InvariantCulture),
                     s.LatencyMaxMs.ToString("F2", CultureInfo.InvariantCulture), s.MaxGapMs.ToString("F2", CultureInfo.InvariantCulture),
-                    s.OutOfOrderCount, s.AvgFrameKb.ToString("F2", CultureInfo.InvariantCulture)));
+                    s.OutOfOrderCount, s.AvgFrameKb.ToString("F2", CultureInfo.InvariantCulture),
+                    s.RepairRttMs.ToString("F2", CultureInfo.InvariantCulture)));
             }
         }
 
@@ -98,6 +102,7 @@ public static class ResultWriter
             ["transport"] = result.Config.Transport.DisplayName(),
             ["codec"] = result.Config.Codec.ToString(),
             ["lossPercent"] = result.Config.LossPercent,
+            ["delayMs"] = result.Config.DelayMs,
             ["lossSeed"] = result.Config.Seed,
             ["width"] = result.Width,
             ["height"] = result.Height,
@@ -139,6 +144,7 @@ public static class ResultWriter
             ("encodeMaxMs", F(s.EncodeMaxMs)),
             ("outOfOrderCount", s.OutOfOrderCount.ToString()),
             ("maxGapMs", F(s.MaxGapMs)),
+            ("repairRttMeasuredMs", F(s.RepairRttMs)),
         };
 
         var builder = new StringBuilder("metric,value\n");

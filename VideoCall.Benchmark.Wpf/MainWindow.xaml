@@ -57,6 +57,9 @@
                     <TextBlock Text="Outgoing loss %" Style="{StaticResource Text.Caption}" Margin="0,14,0,6"/>
                     <TextBox x:Name="LossBox" Text="5"/>
 
+                    <TextBlock Text="Ping (one-way delay ms, 0 = off)" Style="{StaticResource Text.Caption}" Margin="0,14,0,6"/>
+                    <TextBox x:Name="PingBox" Text="0"/>
+
                     <CheckBox x:Name="SweepCheck" Margin="0,16,0,0" VerticalContentAlignment="Center">
                         <StackPanel>
                             <TextBlock Text="Loss sweep 0–10 % (step 1)" FontWeight="SemiBold" FontSize="12"/>

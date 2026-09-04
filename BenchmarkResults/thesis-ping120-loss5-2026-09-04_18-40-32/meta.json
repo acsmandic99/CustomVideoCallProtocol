@@ -1,0 +1,14 @@
+{
+  "testName": "thesis-ping120-loss5",
+  "videoFile": "E:\\Users\\Documents\\Diplomski\\VideoCall\\test-benchmark-video.mp4",
+  "durationSeconds": 12,
+  "transport": "custom-udp",
+  "codec": "H264",
+  "lossPercent": 5,
+  "delayMs": 120,
+  "lossSeed": 11,
+  "width": 640,
+  "height": 480,
+  "sourceFps": 30,
+  "startedUtc": "2026-09-04T16:40:32.3955252Z"
+}

@@ -21,7 +21,8 @@ public partial class MainWindow : Window
         {
             LogText.Text += message + Environment.NewLine;
             LogScroll.ScrollToEnd();
-        });    }
+        });
+    }
 
     private void BrowseButton_Click(object sender, RoutedEventArgs e)
     {
@@ -143,6 +144,12 @@ public partial class MainWindow : Window
             return false;
         }
 
+        if (!int.TryParse(PingBox.Text.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out int delay) || delay is < 0 or > 2000)
+        {
+            SetStatus("Ping must be 0–2000 ms.", true);
+            return false;
+        }
+
         var transport = TransportCombo.SelectedIndex switch
         {
             1 => TransportKind.RawUdp,
@@ -152,7 +159,7 @@ public partial class MainWindow : Window
 
         VideoCodec codec = CodecCombo.SelectedIndex == 1 ? VideoCodec.Jpeg : VideoCodec.H264;
 
-        config = new BenchmarkConfig(name, file, duration, transport, codec, loss);
+        config = new BenchmarkConfig(name, file, duration, transport, codec, loss, delay);
         SetStatus("Running…", false);
         return true;
     }
@@ -173,6 +180,7 @@ public partial class MainWindow : Window
             ("transport", result.Config.Transport.DisplayName()),
             ("codec", result.Config.Codec.ToString()),
             ("loss %", result.Config.LossPercent.ToString()),
+            ("one-way delay (ping)", $"{result.Config.DelayMs} ms"),
             ("elapsed", $"{s.ElapsedSeconds:F1} s"),
             ("sent frames", s.SentFrames.ToString()),
             ("delivered frames", s.DeliveredFrames.ToString()),
@@ -188,6 +196,7 @@ public partial class MainWindow : Window
             ("latency avg / p50", $"{s.LatencyAvgMs:F1} / {s.LatencyP50Ms:F1} ms"),
             ("latency p95 / p99 / max", $"{s.LatencyP95Ms:F1} / {s.LatencyP99Ms:F1} / {s.LatencyMaxMs:F1} ms"),
             ("longest delivery gap (freeze)", $"{s.MaxGapMs:F0} ms"),
+            ("measured repair RTT", $"{s.RepairRttMs:F1} ms"),
             ("encode avg / max", $"{s.EncodeAvgMs:F1} / {s.EncodeMaxMs:F1} ms"),
             ("out-of-order deliveries", s.OutOfOrderCount.ToString()),
         };

@@ -1,0 +1,13 @@
+{
+  "testName": "thesis-loss5-custom",
+  "videoFile": "E:\\Users\\Documents\\Diplomski\\VideoCall\\test-benchmark-video.mp4",
+  "durationSeconds": 10,
+  "transport": "custom-udp",
+  "codec": "H264",
+  "lossPercent": 5,
+  "lossSeed": 11,
+  "width": 640,
+  "height": 480,
+  "sourceFps": 30,
+  "startedUtc": "2026-09-04T16:29:10.7721797Z"
+}

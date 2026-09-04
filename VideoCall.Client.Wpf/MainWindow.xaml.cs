@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -20,6 +21,7 @@ public partial class MainWindow : Window
 
     private string _videoFilePath = string.Empty;
     private int _selectedDropPercent;
+    private int _selectedDelayMs;
     private int _sentLastTick;
     private int _receivedLastTick;
 
@@ -146,9 +148,14 @@ public partial class MainWindow : Window
             CallButton.IsEnabled = true;
             StatusText.Text = $"Registered as '{name}'. Media port {_client.MediaPort}. Enter a name and press Call.";
         }
+        catch (RegistrationFailedException ex)
+        {
+            StatusText.Text = ex.Message;
+            RegisterButton.IsEnabled = true;
+        }
         catch (Exception ex)
         {
-            StatusText.Text = ex.Message.StartsWith("Registration") ? ex.Message : $"Connection failed: {ex.Message}";
+            StatusText.Text = $"Connection failed: {ex.Message}";
             RegisterButton.IsEnabled = true;
         }
     }
@@ -245,21 +252,66 @@ public partial class MainWindow : Window
         StatusText.Text = CamToggle.IsChecked == true ? "Camera on." : "Camera off.";
     }
 
-    private void LossButton_Click(object sender, RoutedEventArgs e)
+    private void LossBox_KeyDown(object sender, KeyEventArgs e)
     {
-        if (sender is not Button button)
+        if (e.Key == Key.Enter)
+        {
+            ApplyLoss();
+        }
+    }
+
+    private void LossBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        ApplyLoss();
+    }
+
+    private void ApplyLoss()
+    {
+        if (!int.TryParse(LossBox.Text.Trim(), out int loss) || loss is < 0 or > 100)
+        {
+            LossBox.Text = _selectedDropPercent.ToString();
+            return;
+        }
+
+        if (loss == _selectedDropPercent)
         {
             return;
         }
 
-        string text = button.Content.ToString() ?? "0%";
-        _selectedDropPercent = int.Parse(text.TrimEnd('%'));
-        _client.DropPercent = _selectedDropPercent;
+        _selectedDropPercent = loss;
+        _client.DropPercent = loss;
+        StatusText.Text = $"Simulated loss set to {loss}%.";
+    }
 
-        foreach (Button b in LossPanel.Children.OfType<Button>())
+    private void PingBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
         {
-            b.FontWeight = b == button ? FontWeights.Bold : FontWeights.Normal;
+            ApplyPing();
         }
+    }
+
+    private void PingBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        ApplyPing();
+    }
+
+    private void ApplyPing()
+    {
+        if (!int.TryParse(PingBox.Text.Trim(), out int delay) || delay is < 0 or > 2000)
+        {
+            PingBox.Text = _selectedDelayMs.ToString();
+            return;
+        }
+
+        if (delay == _selectedDelayMs)
+        {
+            return;
+        }
+
+        _selectedDelayMs = delay;
+        _client.DelayMs = delay;
+        StatusText.Text = $"Simulated ping set to {delay} ms.";
     }
 
     private void WriteBitmap(ref WriteableBitmap? bitmap, Image image, VideoFrame frame)
@@ -283,6 +335,6 @@ public partial class MainWindow : Window
         StatusText.Text = $"In call. sent {_client.SentFrames} ({sentFps} fps), received {_client.ReceivedFrames} ({receivedFps} fps), " +
                           $"dgrams-in {_client.ReceivedDatagrams}, raw {_client.RawReceived}, enc0 {_client.EmptyEncodes}, " +
                           $"nack {_client.NackCount}, pli {_client.KeyframeRequestCount}, on {_client.MediaPort}, " +
-                          $"to {_client.RemoteEndpoint}, loss {_client.DropPercent}%";
+                          $"to {_client.RemoteEndpoint}, loss {_client.DropPercent}%, ping {_client.DelayMs} ms";
     }
 }

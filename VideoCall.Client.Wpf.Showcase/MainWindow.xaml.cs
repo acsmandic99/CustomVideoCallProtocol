@@ -24,6 +24,7 @@ public partial class MainWindow : Window
     private int _receivedLastTick;
     private string _calleeName = string.Empty;
     private string _remoteName = string.Empty;
+    private string _serverHost = "127.0.0.1";
 
     public MainWindow()
     {
@@ -151,6 +152,7 @@ public partial class MainWindow : Window
         }
 
         (string host, int port) = ParseServer(ServerBox.Text);
+        _serverHost = host;
         RegisterButton.IsEnabled = false;
         SetRegisterStatus("Connecting…", false);
 
@@ -167,10 +169,14 @@ public partial class MainWindow : Window
             ResetStage();
             SetStatus($"Registered as '{name}'. Enter the other user's name and call.", false);
         }
+        catch (RegistrationFailedException ex)
+        {
+            SetRegisterStatus(ex.Message, true);
+            RegisterButton.IsEnabled = true;
+        }
         catch (Exception ex)
         {
-            string message = ex.Message.StartsWith("Registration") ? ex.Message : $"Connection failed: {ex.Message}";
-            SetRegisterStatus(message, true);
+            SetRegisterStatus($"Connection failed: {ex.Message}", true);
             RegisterButton.IsEnabled = true;
         }
     }
@@ -348,6 +354,11 @@ public partial class MainWindow : Window
     private void ApplyDefaults()
     {
         _client.Configure(VideoCallClient.SourceKind.WebCamera, string.Empty, VideoCodec.H264, 0);
+
+        // same-machine demo: advertise loopback as the media address so that
+        // traffic stays on 127.0.0.1, where network emulators can intercept it
+        bool loopbackServer = _serverHost is "127.0.0.1" or "localhost" or "::1";
+        _client.MediaIpOverride = loopbackServer ? "127.0.0.1" : null;
     }
 
     private static (string Host, int Port) ParseServer(string text)

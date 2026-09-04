@@ -20,6 +20,7 @@ public sealed class MediaSession : IDisposable
     public int KeyframeRequestCount => _receiver.KeyframeRequestCount;
     public int NackCount => _receiver.NackCount;
     public int RetransmittedFrames => _sender.RetransmittedFrames;
+    public double SmoothedRepairRttMs => _receiver.SmoothedRepairRttMs;
 
     public MediaSession(IUdpMediaTransport transport, IPEndPoint remote, IFrameSink sink, bool recoveryEnabled = true)
     {

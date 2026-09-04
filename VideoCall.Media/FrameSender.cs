@@ -63,7 +63,11 @@ public sealed class FrameSender : IDisposable
 
             lock (_recentLock)
             {
-                if (missingSequence == 0 || !_recent.TryGetValue(missingSequence, out frame) || frame.FrameType != FrameType.Delta)
+                // anything still in the retransmit window is retransmitted, keyframes
+                // included: a ~5 ms retransmission beats waiting for a fresh keyframe.
+                // A fresh keyframe is requested only when the loss falls outside the
+                // window (or an explicit PLI arrives), where retransmission is impossible.
+                if (missingSequence == 0 || !_recent.TryGetValue(missingSequence, out frame))
                 {
                     needKeyframe = true;
                     continue;
@@ -71,6 +75,14 @@ public sealed class FrameSender : IDisposable
             }
 
             RetransmittedFrames++;
+
+            if (frame.FrameType != FrameType.Delta)
+            {
+                // insurance for the case where the retransmission itself is lost:
+                // a fresh keyframe gives the receiver a resync point either way
+                KeyframeRequested?.Invoke();
+            }
+
             _ = RetransmitAsync(frame, missingSequence);
         }
 

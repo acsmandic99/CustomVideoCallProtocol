@@ -139,6 +139,18 @@ public sealed class FileVideoSource : ICamera
 
     private void Loop(VideoCapture capture, CancellationToken cancellationToken)
     {
+        try
+        {
+            RunLoop(capture, cancellationToken);
+        }
+        finally
+        {
+            capture.Dispose();
+        }
+    }
+
+    private void RunLoop(VideoCapture capture, CancellationToken cancellationToken)
+    {
         using var frame = new Mat();
         int fps = (int)Math.Min(60, Math.Max(1, Math.Round(capture.Fps)));
 
@@ -148,7 +160,6 @@ public sealed class FileVideoSource : ICamera
         }
         catch (OperationCanceledException)
         {
-            capture.Dispose();
             return;
         }
         catch (AggregateException)
@@ -224,8 +235,6 @@ public sealed class FileVideoSource : ICamera
                 next = Stopwatch.GetTimestamp();
             }
         }
-
-        capture.Dispose();
     }
 
     private void WaitForAudioSlot(long frameIndex, int fps, CancellationToken cancellationToken)

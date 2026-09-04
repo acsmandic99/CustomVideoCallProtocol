@@ -40,18 +40,53 @@ public static class Program
             dropPredicate: p => p.MessageType == MessageType.MediaFrame && p.FrameType == FrameType.Keyframe && p.Sequence == 17,
             verbose: true);
 
+        await RunScenario(
+            name: "Scenario 4: 10% loss + 40 ms one-way delay (RTT ~100 ms, NACK tier)",
+            alicePort: 7006,
+            bobPort: 7007,
+            dropPercent: 10,
+            dropPredicate: null,
+            verbose: false,
+            delayMs: 40);
+
+        await RunScenario(
+            name: "Scenario 5: 10% loss + 120 ms one-way delay (RTT ~250 ms, PLI for keyframe holes)",
+            alicePort: 7008,
+            bobPort: 7009,
+            dropPercent: 10,
+            dropPredicate: null,
+            verbose: false,
+            delayMs: 120);
+
+        await RunScenario(
+            name: "Scenario 6: 10% loss + 250 ms one-way delay (RTT ~500 ms, fresh keyframes only)",
+            alicePort: 7010,
+            bobPort: 7011,
+            dropPercent: 10,
+            dropPredicate: null,
+            verbose: false,
+            delayMs: 250);
+
         System.Console.WriteLine();
         System.Console.WriteLine("=== All scenarios complete ===");
     }
 
-    private static async Task RunScenario(string name, ushort alicePort, ushort bobPort, int dropPercent, Func<Packet, bool>? dropPredicate, bool verbose)
+    private static async Task RunScenario(string name, ushort alicePort, ushort bobPort, int dropPercent, Func<Packet, bool>? dropPredicate, bool verbose, int delayMs = 0)
     {
         System.Console.WriteLine();
         System.Console.WriteLine($"=== {name} ===");
 
         var generator = new SyntheticFrameGenerator(FrameSize, KeyframeInterval);
-        var aliceTransport = new LossyTransportDecorator(new UdpMediaTransport(), dropPercent, seed: 7, dropPredicate);
-        var bobTransport = new UdpMediaTransport();
+        var lossy = new LossyTransportDecorator(new UdpMediaTransport(), dropPercent, seed: 7, dropPredicate);
+        IUdpMediaTransport aliceTransport = lossy;
+        IUdpMediaTransport bobTransport = new UdpMediaTransport();
+
+        if (delayMs > 0)
+        {
+            // symmetric delay on both endpoints: a recovery round trip takes ~2x delay
+            aliceTransport = new DelayTransportDecorator(aliceTransport, delayMs);
+            bobTransport = new DelayTransportDecorator(bobTransport, delayMs);
+        }
 
         var bobEndpoint = new IPEndPoint(IPAddress.Loopback, bobPort);
         var aliceEndpoint = new IPEndPoint(IPAddress.Loopback, alicePort);
@@ -99,7 +134,8 @@ public static class Program
 
         System.Console.WriteLine($"  Result: sent={FrameCount} (keyframes={sentKeyframes}, forced={forcedKeyframes}), " +
                                  $"received complete={bobSink.ReceivedCount} (keyframes={bobSink.KeyframeCount}), " +
-                                 $"dropped datagrams={aliceTransport.DroppedCount}, " +
-                                 $"keyframe requests sent by BOB={bob.KeyframeRequestCount}");
+                                 $"dropped datagrams={lossy.DroppedCount}, " +
+                                 $"nack={bob.NackCount}, pli={bob.KeyframeRequestCount}, " +
+                                 $"measured repair RTT={bob.SmoothedRepairRttMs:F0} ms");
     }
 }

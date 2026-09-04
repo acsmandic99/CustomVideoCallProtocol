@@ -24,7 +24,7 @@ public sealed class SignalingClient : IDisposable
     private Task? _receiveTask;
     private volatile bool _connected;
 
-    private TaskCompletionSource<bool>? _registerTcs;
+    private TaskCompletionSource<RegisterAckMessage>? _registerTcs;
     private TaskCompletionSource<Guid>? _callRequestTcs;
 
     public bool IsConnected => _connected;
@@ -121,10 +121,10 @@ public sealed class SignalingClient : IDisposable
         _logger.LogInformation("Disconnected");
     }
 
-    public async Task<bool> RegisterAsync(string userId)
+    public async Task<RegisterAckMessage> RegisterAsync(string userId)
     {
         _registerTcs?.TrySetException(new InvalidOperationException("Superseded by a newer registration request."));
-        var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var tcs = new TaskCompletionSource<RegisterAckMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
         _registerTcs = tcs;
 
         var message = new RegisterMessage(userId);
@@ -278,7 +278,7 @@ public sealed class SignalingClient : IDisposable
             switch (message)
             {
                 case RegisterAckMessage m:
-                    _registerTcs?.TrySetResult(m.Success);
+                    _registerTcs?.TrySetResult(m);
                     _registerTcs = null;
                     _listener.OnRegisterAck(m);
                     break;

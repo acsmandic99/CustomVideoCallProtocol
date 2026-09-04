@@ -36,7 +36,7 @@ public sealed class BenchmarkRunner
             throw new InvalidOperationException($"Cannot open video file: {config.VideoFilePath}");
         }
 
-        progress?.Report($"Source {provider.Width}x{provider.Height}@{provider.Fps}fps · {config.Transport.DisplayName()} · {config.Codec} · loss {config.LossPercent}% · {config.DurationSeconds}s");
+        progress?.Report($"Source {provider.Width}x{provider.Height}@{provider.Fps}fps · {config.Transport.DisplayName()} · {config.Codec} · loss {config.LossPercent}% · delay {config.DelayMs} ms · {config.DurationSeconds}s");
 
         using IVideoEncoder encoder = config.Codec == VideoCodec.H264
             ? new H264VideoEncoder(provider.Width, provider.Height, provider.Fps)
@@ -50,6 +50,7 @@ public sealed class BenchmarkRunner
         int pliCount;
         int retransmitted;
         int droppedDatagrams;
+        double repairRttMs;
         Func<(int Nack, int Pli)>? sampleRecovery = null;
 
         if (config.Transport == TransportKind.Tcp)
@@ -72,18 +73,28 @@ public sealed class BenchmarkRunner
             pliCount = 0;
             retransmitted = 0;
             droppedDatagrams = 0;
+            repairRttMs = 0;
         }
         else
         {
             bool recovery = config.Transport == TransportKind.CustomUdp;
 
-            var senderTransport = new LossyTransportDecorator(new UdpMediaTransport(), config.LossPercent, config.Seed);
-            var receiverTransport = new UdpMediaTransport();
+            var lossySenderTransport = new LossyTransportDecorator(new UdpMediaTransport(), config.LossPercent, config.Seed);
+            IUdpMediaTransport senderTransport = lossySenderTransport;
+            IUdpMediaTransport receiverTransport = new UdpMediaTransport();
+
+            if (config.DelayMs > 0)
+            {
+                // symmetric one-way delay on both endpoints: a recovery round trip takes ~2x delay
+                senderTransport = new DelayTransportDecorator(senderTransport, config.DelayMs);
+                receiverTransport = new DelayTransportDecorator(receiverTransport, config.DelayMs);
+            }
 
             ushort senderPort = (ushort)Random.Shared.Next(24000, 24900);
             ushort receiverPort = (ushort)Random.Shared.Next(24901, 25400);
 
-            using var senderSession = new MediaSession(senderTransport, new IPEndPoint(IPAddress.Loopback, receiverPort), new NullSink(), recovery);            using var receiverSession = new MediaSession(receiverTransport, new IPEndPoint(IPAddress.Loopback, senderPort), sink, recovery);
+            using var senderSession = new MediaSession(senderTransport, new IPEndPoint(IPAddress.Loopback, receiverPort), new NullSink(), recovery);
+            using var receiverSession = new MediaSession(receiverTransport, new IPEndPoint(IPAddress.Loopback, senderPort), sink, recovery);
             senderSession.Start(senderPort);
             receiverSession.Start(receiverPort);
 
@@ -110,10 +121,11 @@ public sealed class BenchmarkRunner
             nackCount = receiverSession.NackCount;
             pliCount = receiverSession.KeyframeRequestCount;
             retransmitted = senderSession.RetransmittedFrames;
-            droppedDatagrams = senderTransport.DroppedCount;
+            droppedDatagrams = lossySenderTransport.DroppedCount;
+            repairRttMs = receiverSession.SmoothedRepairRttMs;
         }
 
-        BenchmarkSummary summary = BuildSummary(elapsed, accumulator, sink, nackCount, pliCount, retransmitted, droppedDatagrams);
+        BenchmarkSummary summary = BuildSummary(elapsed, accumulator, sink, nackCount, pliCount, retransmitted, droppedDatagrams, repairRttMs);
         List<FrameRecord> frames = BuildFrameRecords(accumulator, sink);
 
         progress?.Report($"Done: {summary.DeliveredFrames}/{summary.SentFrames} delivered ({summary.DeliveredPercent:F1}%) · " +
@@ -183,8 +195,8 @@ public sealed class BenchmarkRunner
                     delivered - lastDelivered,
                     (accumulator.TotalBytes - lastBytes) / 1024.0,
                     (deliveredBytes - lastDeliveredBytes) / 1024.0,
-                    nackDelta,
-                    pliDelta));
+                    nackDelta - lastNack,
+                    pliDelta - lastPli));
 
                 lastSent = (int)sequence;
                 lastDelivered = delivered;
@@ -243,7 +255,8 @@ public sealed class BenchmarkRunner
         int nackCount,
         int pliCount,
         int retransmitted,
-        int droppedDatagrams)
+        int droppedDatagrams,
+        double repairRttMs)
     {
         int sent = accumulator.Frames.Count;
         int delivered = sink.DeliveredCount;
@@ -296,7 +309,8 @@ public sealed class BenchmarkRunner
             EncodeAvgMs: encodeAvg,
             EncodeMaxMs: encodeMax,
             OutOfOrderCount: sink.OutOfOrderCount,
-            MaxGapMs: maxGapMs);
+            MaxGapMs: maxGapMs,
+            RepairRttMs: repairRttMs);
     }
 
     private static double Percentile(List<double> sorted, double fraction)

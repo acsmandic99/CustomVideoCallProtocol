@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\VideoCall.Benchmark.Core\VideoCall.Benchmark.Core.csproj" />
     <ProjectReference Include="..\VideoCall.Codecs\VideoCall.Codecs.csproj" />
     <ProjectReference Include="..\VideoCall.Media\VideoCall.Media.csproj" />
   </ItemGroup>

@@ -1,0 +1,13 @@
+{
+  "testName": "thesis-loss5-raw",
+  "videoFile": "E:\\Users\\Documents\\Diplomski\\VideoCall\\test-benchmark-video.mp4",
+  "durationSeconds": 10,
+  "transport": "raw-udp",
+  "codec": "H264",
+  "lossPercent": 5,
+  "lossSeed": 11,
+  "width": 640,
+  "height": 480,
+  "sourceFps": 30,
+  "startedUtc": "2026-09-04T16:29:37.805829Z"
+}

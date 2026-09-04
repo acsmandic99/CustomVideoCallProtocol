@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
+using VideoCall.Benchmark.Core;
 using VideoCall.Codecs;
 using VideoCall.Codecs.FFmpeg;
 using VideoCall.Codecs.OpenCv;
@@ -20,7 +21,52 @@ public static class Program
     private const int FrameCount = 300;
     private static readonly int[] LossLevels = { 0, 5, 10, 15, 20, 30, 50 };
 
-    public static async Task Main()
+    public static async Task Main(string[] args)
+    {
+        if (args.Length >= 5)
+        {
+            await RunHeadlessAsync(args);
+            return;
+        }
+
+        RunMatrix();
+    }
+
+    // headless <name> <videoFile> <durationSeconds> <custom-udp|raw-udp|tcp> <lossPercent> [h264|jpeg] [delayMs]
+    private static async Task RunHeadlessAsync(string[] args)
+    {
+        TransportKind transport = args[3] switch
+        {
+            "raw-udp" => TransportKind.RawUdp,
+            "tcp" => TransportKind.Tcp,
+            _ => TransportKind.CustomUdp,
+        };
+
+        VideoCodec codec = args.Length > 5 && args[5].Equals("jpeg", StringComparison.OrdinalIgnoreCase)
+            ? VideoCodec.Jpeg
+            : VideoCodec.H264;
+
+        int delayMs = args.Length > 6 ? int.Parse(args[6]) : 0;
+
+        var config = new BenchmarkConfig(args[0], args[1], int.Parse(args[2]), transport, codec, int.Parse(args[4]), delayMs);
+
+        BenchmarkResult result = await BenchmarkRunner.RunAsync(config, new ConsoleProgress(), CancellationToken.None);
+        string folder = ResultWriter.Write(result);
+
+        BenchmarkSummary s = result.Summary;
+        System.Console.WriteLine();
+        System.Console.WriteLine($"name={config.TestName} transport={config.Transport.DisplayName()} loss={config.LossPercent}%");
+        System.Console.WriteLine(
+            $"sent={s.SentFrames} delivered={s.DeliveredFrames} ({s.DeliveredPercent:F2}%) decodable={s.DecodablePercent:F2}% " +
+            $"nack={s.NackCount} pli={s.PliCount} retrans={s.RetransmittedFrames} dropped={s.DroppedDatagrams} " +
+            $"maxGap={s.MaxGapMs:F0}ms repairRtt={s.RepairRttMs:F0}ms");
+        System.Console.WriteLine(
+            $"latency p50/p95/max={s.LatencyP50Ms:F1}/{s.LatencyP95Ms:F1}/{s.LatencyMaxMs:F1}ms " +
+            $"fps={s.FpsDelivered:F1} goodput={s.GoodputKbPerSec:F1}KB/s encodeAvg={s.EncodeAvgMs:F2}ms");
+        System.Console.WriteLine($"results: {Path.GetFullPath(folder)}");
+    }
+
+    private static void RunMatrix()
     {
         System.Console.WriteLine("=== VideoCall Protocol Benchmark ===");
         System.Console.WriteLine($"frames={FrameCount}, {Fps}fps, {Width}x{Height}, synthetic moving pattern");
@@ -33,7 +79,7 @@ public static class Program
         {
             foreach (int loss in LossLevels)
             {
-                UdpResult r = await RunUdpAsync(codec, loss);
+                UdpResult r = RunUdpAsync(codec, loss).GetAwaiter().GetResult();
                 System.Console.WriteLine($"{codec,-6} {loss,3}%  {r.Sent,4}  {r.Delivered,8}  {r.DeliveredPercent,9:F1}%  {r.AvgFrameKB,5:F1}  {r.NackCount,4}  {r.PliCount,3}");
             }
         }
@@ -44,12 +90,17 @@ public static class Program
 
         foreach (VideoCodec codec in new[] { VideoCodec.H264, VideoCodec.Jpeg })
         {
-            TcpResult t = await RunTcpAsync(codec);
+            TcpResult t = RunTcpAsync(codec).GetAwaiter().GetResult();
             System.Console.WriteLine($"{codec,-6} {t.Sent,4}  {t.Delivered,8}  {t.AvgFrameKB,5:F1}  {t.AvgCycleTimeMs,15:F1}");
         }
 
         System.Console.WriteLine();
         System.Console.WriteLine("=== Benchmark complete ===");
+    }
+
+    private sealed class ConsoleProgress : IProgress<string>
+    {
+        public void Report(string value) => System.Console.WriteLine(value);
     }
 
     private sealed record UdpResult(int Sent, int Delivered, double DeliveredPercent, double AvgFrameKB, int NackCount, int PliCount);

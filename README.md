@@ -5,7 +5,7 @@ A custom low-latency video call protocol inspired by WebRTC, built as a bachelor
 ## Key Features
 
 * **Binary packet protocol (big-endian)** for signaling (TCP) and media (UDP)
-* **Hybrid NACK/PLI recovery:** lost delta frames are retransmitted from a short buffer, lost keyframes trigger generation of a fresh keyframe from the camera (no stale retransmissions, no accumulated latency)
+* **Hybrid NACK/PLI recovery:** any lost frame still in the retransmit window is retransmitted (keyframes included); a fresh keyframe is requested (PLI) only when the loss falls outside the window. The receiver resyncs to the next buffered keyframe when a reference frame is unrecoverable, and it continuously measures the NACK-to-repair round trip: while the repair fits inside the reordering window it requests retransmissions, above 200 ms measured repair time keyframe holes switch to fresh keyframe requests while small delta frames stay retransmittable, and beyond the reordering window it switches entirely to keyframe requests (adaptive two-tier NACK/PLI policy).
 * **JPEG and H.264 video codecs**, switchable per call and compared under simulated packet loss (0–50%)
 * **Audio call support** (8 kHz mono PCM, 20 ms packets)
 * **UI-independent core** (class libraries) with a WPF demo client driven by a facade (`VideoCallClient`)

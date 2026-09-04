@@ -25,6 +25,7 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
     private SignalingClient? _signaling;
     private MediaSession? _mediaSession;
     private LossyTransportDecorator? _lossyTransport;
+    private DelayTransportDecorator? _delayTransport;
     private ICamera? _camera;
     private AudioCapture? _audioCapture;
     private AudioPlayer? _audioPlayer;
@@ -43,6 +44,7 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
     private string _videoFilePath = string.Empty;
     private VideoCodec _codec = VideoCodec.H264;
     private int _lossPercent;
+    private int _delayMs;
     private int _captureWidth = 640;
     private int _captureHeight = 480;
     private int _captureFps = 30;
@@ -74,6 +76,14 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
     public int KeyframeRequestCount => _mediaSession?.KeyframeRequestCount ?? 0;
 
     public int MicrophoneIndex { get; set; }
+
+    /// <summary>
+    /// When set, overrides the LAN IP advertised to the peer for media.
+    /// Useful for same-machine demos: media over 127.0.0.1 is visible to
+    /// packet-manipulation tools (WinDivert/Clumsy), traffic to the own LAN
+    /// address takes an internal hairpin path they cannot intercept.
+    /// </summary>
+    public string? MediaIpOverride { get; set; }
 
     private bool _microphoneMuted;
     private bool _cameraMuted;
@@ -111,6 +121,20 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
         }
     }
 
+    /// <summary>Simulated one-way network delay in milliseconds (test tool); adjustable during a call.</summary>
+    public int DelayMs
+    {
+        get => _delayTransport is not null ? _delayTransport.DelayMs : _delayMs;
+        set
+        {
+            _delayMs = value;
+            if (_delayTransport is not null)
+            {
+                _delayTransport.DelayMs = value;
+            }
+        }
+    }
+
     public void Configure(SourceKind source, string videoFilePath, VideoCodec codec, int lossPercent, int width = 640, int height = 480, int fps = 30)
     {
         _source = source;
@@ -131,14 +155,14 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
         _localUdpPort = (ushort)Random.Shared.Next(20000, 25000);
 
         await _signaling.ConnectAsync(serverHost, serverPort);
-        bool ok = await _signaling.RegisterAsync(userId);
+        RegisterAckMessage ack = await _signaling.RegisterAsync(userId);
 
-        if (!ok)
+        if (!ack.Success)
         {
             SignalingClient? failed = _signaling;
             _signaling = null;
             await failed.DisconnectAsync();
-            throw new InvalidOperationException("Registration failed: name already taken.");
+            throw new RegistrationFailedException(ack.Reason.Length > 0 ? ack.Reason : "rejected by server");
         }
 
         RegisteredName = userId;
@@ -157,7 +181,7 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
             throw new InvalidOperationException("You cannot call yourself.");
         }
 
-        _activeCallId = await _signaling.CallAsync(calleeId, _signaling.LocalIp ?? "127.0.0.1", _localUdpPort);
+        _activeCallId = await _signaling.CallAsync(calleeId, MediaIpOverride ?? _signaling.LocalIp ?? "127.0.0.1", _localUdpPort);
     }
 
     public async Task AcceptCallAsync()
@@ -169,7 +193,7 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
 
         _activeCallId = _incomingCallId;
         _incomingCallId = Guid.Empty;
-        await _signaling.AcceptCallAsync(_activeCallId, _signaling.LocalIp ?? "127.0.0.1", _localUdpPort);
+        await _signaling.AcceptCallAsync(_activeCallId, MediaIpOverride ?? _signaling.LocalIp ?? "127.0.0.1", _localUdpPort);
 
         if (_remoteEndpoint is not null)
         {
@@ -289,7 +313,8 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
             : new JpegVideoEncoder();
 
         _lossyTransport = new LossyTransportDecorator(new UdpMediaTransport(), _lossPercent);
-        _mediaSession = new MediaSession(_lossyTransport, _remoteEndpoint!, new Sink(this));
+        _delayTransport = new DelayTransportDecorator(_lossyTransport, _delayMs);
+        _mediaSession = new MediaSession(_delayTransport, _remoteEndpoint!, new Sink(this));
         _mediaSession.KeyframeRequested += () => _encoder?.ForceKeyframe();
         _mediaSession.SendError += ex => SendError?.Invoke(ex);
         _mediaSession.Start(_localUdpPort);
@@ -341,6 +366,7 @@ public sealed class VideoCallClient : ISignalingListener, IDisposable
         _mediaSession?.Dispose();
         _mediaSession = null;
         _lossyTransport = null;
+        _delayTransport = null;
         _remoteEndpoint = null;
     }
 

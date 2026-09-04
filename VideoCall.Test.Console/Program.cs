@@ -40,10 +40,10 @@ public static class Program
 
         System.Console.WriteLine("--- Step 2: Register ---");
         aliceListener.PrintSent("Register: userId=Alice");
-        bool aliceRegistered = await alice.RegisterAsync("Alice");
+        bool aliceRegistered = (await alice.RegisterAsync("Alice")).Success;
 
         bobListener.PrintSent("Register: userId=Bob");
-        bool bobRegistered = await bob.RegisterAsync("Bob");
+        bool bobRegistered = (await bob.RegisterAsync("Bob")).Success;
 
         System.Console.WriteLine($"  Result: Alice registered={aliceRegistered}, Bob registered={bobRegistered}\n");
 

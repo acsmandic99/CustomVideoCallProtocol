@@ -1,0 +1,13 @@
+{
+  "testName": "h264-clumsy-lag200",
+  "videoFile": "E:\\Users\\Documents\\Diplomski\\VideoCall\\test-benchmark-video.mp4",
+  "durationSeconds": 10,
+  "transport": "custom-udp",
+  "codec": "H264",
+  "lossPercent": 0,
+  "lossSeed": 11,
+  "width": 640,
+  "height": 480,
+  "sourceFps": 30,
+  "startedUtc": "2026-09-02T16:39:17.2438719Z"
+}

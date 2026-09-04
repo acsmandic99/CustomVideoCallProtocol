@@ -27,6 +27,7 @@ public sealed record BenchmarkConfig(
     TransportKind Transport,
     VideoCodec Codec,
     int LossPercent,
+    int DelayMs = 0,
     int Seed = 11);
 
 public sealed record FrameRecord(uint Sequence, long SizeBytes, string FrameType, double EncodeMs, double? LatencyMs);
@@ -59,7 +60,8 @@ public sealed record BenchmarkSummary(
     double EncodeAvgMs,
     double EncodeMaxMs,
     int OutOfOrderCount,
-    double MaxGapMs);
+    double MaxGapMs,
+    double RepairRttMs);
 
 public sealed record BenchmarkResult(
     BenchmarkConfig Config,

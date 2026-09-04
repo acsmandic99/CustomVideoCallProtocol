@@ -454,7 +454,7 @@ public sealed class SignalingServer : IDisposable
     private void ForwardTo(ClientConnection target, ISignalingMessage message)
     {
         byte[] payload = _codec.Encode(message);
-        var packet = new Packet(message.MessageType, payload, frameType: FrameType.Audio);
+        var packet = new Packet(message.MessageType, payload, frameType: FrameType.None);
         byte[] bytes = PacketWriter.Serialize(packet);
 
         try

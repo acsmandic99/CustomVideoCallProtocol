@@ -1,0 +1,13 @@
+{
+  "testName": "thesis-tcp-baseline",
+  "videoFile": "E:\\Users\\Documents\\Diplomski\\VideoCall\\test-benchmark-video.mp4",
+  "durationSeconds": 10,
+  "transport": "tcp",
+  "codec": "H264",
+  "lossPercent": 0,
+  "lossSeed": 11,
+  "width": 640,
+  "height": 480,
+  "sourceFps": 30,
+  "startedUtc": "2026-09-04T16:30:00.8953429Z"
+}

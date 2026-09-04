@@ -33,7 +33,7 @@ System.Console.WriteLine();
 await client.ConnectAsync(host, port);
 
 listener.PrintSent($"Register userId={userId}");
-bool registered = await client.RegisterAsync(userId);
+bool registered = (await client.RegisterAsync(userId)).Success;
 
 if (!registered)
 {
